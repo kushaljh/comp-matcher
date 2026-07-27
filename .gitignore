@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# env — never commit secrets
+.env
+.env.*
+!.env.example
+
+# supabase local artifacts
+supabase/.temp/
+supabase/.branches/
+
+# misc
+*.log
+.DS_Store

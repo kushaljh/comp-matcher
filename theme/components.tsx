@@ -1,3 +1,14 @@
+// Base components, themed. Everything here reads live from useTheme(), so a
+// palette / text-size change re-renders it without a reload.
+//
+// Design notes:
+//   Button    pill, Barlow Semi Condensed 600, uppercase, tracked. Primary is
+//             solid brass with the page colour as its ink; secondary is a
+//             hairline outline; destructive is a red outline.
+//   TextField inset well (fieldBg + 1px line), with a tracked mono micro-label.
+//   Card      raised surface with a brass hairline.
+//   Screen    themed page with the 520px phone-shaped canvas kept for web.
+
 import React from 'react';
 import {
   ActivityIndicator,
@@ -10,7 +21,7 @@ import {
   ViewProps,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, fontSizes, fontWeights, radii, spacing } from './tokens';
+import { useTheme } from './ThemeProvider';
 
 // ---------------------------------------------------------------------------
 // Screen
@@ -21,8 +32,9 @@ type ScreenProps = ViewProps & {
 };
 
 export function Screen({ children, style, ...rest }: ScreenProps) {
+  const { colors } = useTheme();
   return (
-    <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: colors.bg }]} edges={['top', 'left', 'right']}>
       <View style={[styles.screenContent, style]} {...rest}>
         {children}
       </View>
@@ -51,7 +63,18 @@ export function Button({
   loading = false,
   disabled = false,
 }: ButtonProps) {
+  const { colors, fonts, fs, radii } = useTheme();
   const isDisabled = disabled || loading;
+
+  const container =
+    variant === 'primary'
+      ? { backgroundColor: colors.brass, borderColor: colors.brass }
+      : variant === 'secondary'
+        ? { backgroundColor: 'transparent', borderColor: colors.line }
+        : { backgroundColor: 'transparent', borderColor: colors.red };
+
+  const textColor =
+    variant === 'primary' ? colors.bg : variant === 'secondary' ? colors.ink : colors.red;
 
   return (
     <Pressable
@@ -59,38 +82,27 @@ export function Button({
       disabled={isDisabled}
       style={({ pressed }) => [
         styles.button,
-        variantStyles[variant].container,
+        { borderRadius: radii.pill },
+        container,
         isDisabled && styles.buttonDisabled,
         pressed && !isDisabled && styles.buttonPressed,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variantStyles[variant].text.color as string} />
+        <ActivityIndicator color={textColor} />
       ) : (
-        <Text style={[styles.buttonText, variantStyles[variant].text]}>{title}</Text>
+        <Text
+          style={[
+            styles.buttonText,
+            { color: textColor, fontFamily: fonts.condensedSemi, fontSize: fs(14) },
+          ]}
+        >
+          {title}
+        </Text>
       )}
     </Pressable>
   );
 }
-
-const variantStyles = {
-  primary: StyleSheet.create({
-    container: { backgroundColor: colors.brass },
-    text: { color: colors.navy },
-  }),
-  secondary: StyleSheet.create({
-    container: {
-      backgroundColor: 'transparent',
-      borderWidth: 1,
-      borderColor: colors.brass,
-    },
-    text: { color: colors.brass },
-  }),
-  destructive: StyleSheet.create({
-    container: { backgroundColor: colors.red },
-    text: { color: colors.textInverse },
-  }),
-};
 
 // ---------------------------------------------------------------------------
 // TextField
@@ -102,15 +114,34 @@ type TextFieldProps = TextInputProps & {
 };
 
 export function TextField({ label, error, style, ...rest }: TextFieldProps) {
+  const { colors, fonts, fs } = useTheme();
   return (
     <View style={styles.fieldContainer}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? (
+        <Text style={[styles.label, { color: colors.ink2, fontFamily: fonts.mono, fontSize: fs(9.5) }]}>
+          {label}
+        </Text>
+      ) : null}
       <TextInput
-        style={[styles.input, error ? styles.inputError : undefined, style]}
-        placeholderTextColor={colors.textSecondary}
+        style={[
+          styles.input,
+          {
+            backgroundColor: colors.fieldBg,
+            borderColor: error ? colors.red : colors.line,
+            color: colors.ink,
+            fontFamily: fonts.body,
+            fontSize: fs(16),
+          },
+          style,
+        ]}
+        placeholderTextColor={colors.ink2}
         {...rest}
       />
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? (
+        <Text style={[styles.errorText, { color: colors.red, fontFamily: fonts.body, fontSize: fs(12) }]}>
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -124,25 +155,32 @@ type CardProps = ViewProps & {
 };
 
 export function Card({ children, style, ...rest }: CardProps) {
+  const { colors, radii } = useTheme();
   return (
-    <View style={[styles.card, style]} {...rest}>
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: colors.surface, borderColor: colors.line, borderRadius: radii.rSm },
+        style,
+      ]}
+      {...rest}
+    >
       {children}
     </View>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Styles
+// Styles (layout only — colour, radius and type come from useTheme)
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.cream,
   },
   screenContent: {
     flex: 1,
-    padding: spacing.md,
+    padding: 16,
     // Phone-shaped canvas on large screens (desktop web): cap and center the
     // content column instead of smearing a mobile layout across the window.
     width: '100%',
@@ -150,9 +188,9 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   button: {
-    paddingVertical: spacing.sm + 4,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.md,
+    paddingVertical: 13,
+    paddingHorizontal: 24,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -163,41 +201,28 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   buttonText: {
-    fontSize: fontSizes.md,
-    fontWeight: fontWeights.semibold,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
   fieldContainer: {
-    marginBottom: spacing.md,
+    marginBottom: 16,
   },
   label: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    fontSize: fontSizes.md,
-    color: colors.textPrimary,
-    backgroundColor: colors.white,
-  },
-  inputError: {
-    borderColor: colors.red,
+    borderRadius: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
   },
   errorText: {
-    color: colors.red,
-    fontSize: fontSizes.xs,
-    marginTop: spacing.xs,
+    marginTop: 4,
   },
   card: {
-    backgroundColor: colors.creamDark,
-    borderRadius: radii.lg,
-    padding: spacing.md,
+    padding: 16,
     borderWidth: 1,
-    borderColor: colors.border,
   },
 });

@@ -1,27 +1,49 @@
-// Design tokens for Comp Matcher — a warm, vintage-swing-dance palette.
+// BACK-COMPAT SHIM — do not add to this file.
+//
+// The app's visual system now lives in theme/ThemeProvider.tsx (useTheme()),
+// which is themed (dark/light), text-scaled, and font-aware. This module keeps
+// the OLD static token names alive so screens that haven't been converted yet
+// still compile and render acceptably; every value is remapped onto the new
+// DARK palette.
+//
+// Notable remappings (old name -> new role), because a few old names read
+// backwards on a dark theme:
+//   navy        -> bg        (was "the dark colour": text on brass, dark fills)
+//   cream       -> bg        (was "the page background")
+//   creamDark   -> surface   (was "card on the page")
+//   white       -> surface   (was "the lightest surface")
+//   brassDark   -> brassLight(the *emphasis* brass is the lighter one in dark)
+//   textInverse -> ink       (every usage sits on a dark fill, so it must be light)
+//   border      -> cardLine  (visible brass hairline)
+//
+// New screens: import { useTheme } from './ThemeProvider' instead.
+
+import { palettes } from './palette';
+
+const p = palettes.dark;
 
 export const colors = {
   // Core surfaces
-  navy: '#1B2430', // deep navy, primary background / text on light surfaces
-  charcoal: '#2A2A28', // secondary dark surface
-  cream: '#F6F1E7', // warm off-white background
-  creamDark: '#EAE1CD', // subtle contrast surface (cards on cream bg)
+  navy: p.bg,
+  charcoal: p.surface2,
+  cream: p.bg,
+  creamDark: p.surface,
 
   // Accents
-  brass: '#C7972C', // brass/gold accent — primary actions, highlights
-  brassDark: '#A87A1E', // pressed/active state for brass
-  red: '#8C3B2E', // muted red — destructive actions
+  brass: p.brass,
+  brassDark: p.brassLight,
+  red: p.red,
 
   // Text
-  textPrimary: '#1B2430',
-  textSecondary: '#5B5750',
-  textInverse: '#F6F1E7',
+  textPrimary: p.ink,
+  textSecondary: p.ink2,
+  textInverse: p.ink,
 
   // Utility
-  border: '#D8CBAE',
-  white: '#FFFFFF',
+  border: p.cardLine,
+  white: p.surface,
   black: '#000000',
-  disabled: '#B9B2A0',
+  disabled: '#6E5D4C',
 } as const;
 
 export const spacing = {

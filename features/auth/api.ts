@@ -2,6 +2,7 @@
 // competition history) — the same operations scripts/verify-wp1.mjs exercises
 // against the live DB with the anon client.
 
+import { Platform } from 'react-native';
 import type { Enums } from '../../lib/database.types';
 import { supabase } from '../../lib/supabase';
 
@@ -9,7 +10,19 @@ export type DanceRole = Enums<'dance_role'>;
 export type ContactPlatform = Enums<'contact_platform'>;
 
 export function signUpWithEmail(email: string, password: string) {
-  return supabase.auth.signUp({ email, password });
+  return supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      // Confirmation emails redirect back to wherever the user signed up
+      // (deployed site or local dev) instead of the project's Site URL.
+      // The origin must be allow-listed in Supabase Auth -> URL Configuration.
+      emailRedirectTo:
+        Platform.OS === 'web' && typeof window !== 'undefined'
+          ? window.location.origin
+          : undefined,
+    },
+  });
 }
 
 export function signInWithEmail(email: string, password: string) {

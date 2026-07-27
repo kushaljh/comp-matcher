@@ -21,7 +21,9 @@ const auth =
     ? {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: false,
+        // Consume auth tokens arriving in the URL hash (email confirmation,
+        // password recovery links) so the click lands the user signed in.
+        detectSessionInUrl: true,
       }
     : {
         storage: AsyncStorage,

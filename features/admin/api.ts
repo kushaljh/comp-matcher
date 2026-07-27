@@ -7,14 +7,6 @@ import type { Enums, Tables } from '../../lib/database.types';
 export type EventRow = Tables<'events'>;
 export type ContestRow = Tables<'contests'>;
 
-// `admin_users` is NOT yet in lib/database.types.ts (frozen for this
-// worktree — see the migration's header comment and
-// .claude/logs/admin-panel.md's "For the orchestrator" section for the exact
-// types snippet to fold in later). This is the ONLY function in the app that
-// touches admin_users, and it goes through the untyped client escape hatch
-// (`supabase.from('admin_users' as any)`) with this narrow local row type.
-type AdminUserRow = { user_id: string; created_at: string };
-
 // --- admin status ------------------------------------------------------
 
 // Whether the current user has an admin_users row. RLS only ever lets a
@@ -29,12 +21,12 @@ export async function fetchIsAdmin(): Promise<boolean> {
   if (!user) return false;
 
   const { data, error } = await supabase
-    .from('admin_users' as any)
+    .from('admin_users')
     .select('user_id')
     .eq('user_id', user.id)
     .maybeSingle();
   if (error) throw error;
-  return (data as AdminUserRow | null) != null;
+  return data != null;
 }
 
 // --- events (admin) ------------------------------------------------------

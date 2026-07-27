@@ -162,6 +162,91 @@ Throwaway users (`wp3-…@verify.test`) were created in Balboa Rendezvous /
 - Realtime match notifications are out of scope; the match is detected
   synchronously right after the like insert.
 
+## Web fix pass (post-merge blocker)
+
+The orchestrator's interactive browser testing (visible browser, dev **and**
+production `expo export` builds) found: pressing ✓ reaches `handleButton` and
+`SwipeCard.swipe()`, but the card's transform stayed `matrix(1,0,0,1,0,0)`,
+`withTiming`'s completion callback never fired, so **no swipe row was inserted**
+and, because `busyRef` was only released in `handleSwipe`'s `finally`, both
+buttons stayed permanently bricked.
+
+### Investigation (root cause)
+
+Rebased onto `main` first (WP1/2/4 now present; clean rebase). Then traced the
+reanimated-on-web pipeline in `node_modules`:
+
+- Worklets ARE transformed for web — the production web bundle contains 488
+  `__workletHash` occurrences, so `babel-preset-expo` is applying
+  `react-native-worklets/plugin` for the web platform.
+- `react-native-reanimated/lib/module/common/constants/platform.js`:
+  `SHOULD_BE_USE_WEB = IS_JEST || IS_WEB || IS_WINDOWS` → correctly `true` on web,
+  so reanimated takes its web code path.
+- `react-native-worklets/lib/module/initializers/initializers.js` `init()` runs
+  on import and installs `globalThis._getAnimationTimestamp = () => performance.now()`.
+- The animation driver `react-native-reanimated/lib/module/valueSetter.js` uses
+  `global.__frameTimestamp || global._getAnimationTimestamp()` and
+  `requestAnimationFrame(step)` to self-drive `withTiming`.
+- Live page probe (via the browser's JS console on a signed-in throwaway):
+  `globalThis._getAnimationTimestamp` is a function returning a valid timestamp,
+  and `globalThis.requestAnimationFrame.toString()` is `function requestAnimationFrame() { [native code] }`
+  (the browser-native rAF — NOT the worklets queue override, which was absent).
+
+So the web infrastructure is **structurally correct** — there was no
+misconfiguration to fix (which is why babel.config.js / app.json were left
+untouched; changing them would have been guessing). I could not reproduce the
+freeze in this environment because the automation browser pane is **hidden**
+(`document.hidden === true`), and native `requestAnimationFrame` is fully paused
+while hidden (measured: **0 rAF callbacks in 2.2 s**). Every reanimated web DOM
+update (mappers and `withTiming` alike) is rAF-scheduled, so a hidden pane cannot
+drive or observe any of it. The orchestrator's visible-browser finding stands and
+cannot be refuted from here.
+
+### Fix (robust, platform-agnostic)
+
+Given the confirmed symptom and that correctness must not depend on an animation
+callback that may never fire on web, the swipe **commit was decoupled from
+reanimated's completion callback**:
+
+- `features/swipe/SwipeCard.tsx` — `triggerSwipe` now starts the reanimated
+  fly-off with no completion callback and schedules the single `onSwiped(dir)`
+  commit on a plain `setTimeout(FLY_DURATION_MS)`. A timer fires on every
+  platform, so the swipe always persists and the deck always advances; the
+  reanimated animation is now purely the (native) visual. A cleanup effect clears
+  a pending timer if the card unmounts mid-fly-off. The single code path is
+  preserved: gesture → `runOnJS(triggerSwipe)` and buttons → `ref.swipe()` →
+  `triggerSwipe` → `setTimeout` → `onSwiped` → `Deck.handleSwipe`.
+- `features/swipe/Deck.tsx` — added the REQUIRED failsafe: `handleButton` arms a
+  2 s watchdog that force-releases `busyRef`, so a swipe that never resolves can
+  never permanently brick the buttons; the normal path clears it in
+  `handleSwipe`'s `finally`, and it is cleared on unmount.
+
+Net effect on web: if reanimated does animate on a visible browser, users get the
+fly-off AND a reliable commit; if it truly does not, the card advances without a
+fly-off (the "skip-animation-and-commit" fallback the orchestrator authorized) —
+either way the buttons work and swipes persist. Native is unchanged in behavior
+(reanimated fly-off still plays; the ~240 ms timer matches the animation).
+
+Not done: a bespoke web-only CSS-transition fly-off. It would give web a visible
+animation even if reanimated is inert, but it is interactive code I could not
+verify in this hidden-pane environment; shipping unverifiable interaction for the
+core loop was judged riskier than the reasoned, minimal fix above. It is a clean
+follow-up if the orchestrator confirms reanimated is inert on visible web.
+
+### Re-verification (verbatim)
+
+```
+$ npx tsc --noEmit           → (zero errors)
+$ node scripts/verify-wp3.mjs → 13/13 checks passed. VERIFY-WP3 PASSED
+$ npx expo export --platform web → Exported: dist  (succeeds)
+```
+
+Diagnostic scaffolding used during the investigation (a temporary `/animtest`
+route, a `.claude/launch.json`, an isolated dev server on :8092, and a throwaway
+`wp3-animtest@verify.test` user) was all removed/deleted afterward. Note: a dev
+server that was running on :8081 was stopped during diagnosis — restart it if
+needed for interactive re-verification.
+
 ## Git
 
-Committed on `wp3-swipe`; `git status` clean after the final commit (see below).
+Committed on `wp3-swipe`; `git status` clean after the final commit.

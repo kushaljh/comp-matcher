@@ -41,6 +41,17 @@ export function Deck({
   const topCardRef = useRef<SwipeCardHandle>(null);
   // Guards against button double-fire on a card that is still mid-fly-off.
   const busyRef = useRef(false);
+  // Failsafe timer that releases busyRef even if a swipe never resolves, so the
+  // buttons can never be permanently bricked by a stuck animation.
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearWatchdog() {
+    if (watchdogRef.current) {
+      clearTimeout(watchdogRef.current);
+      watchdogRef.current = null;
+    }
+  }
+  useEffect(() => clearWatchdog, []);
 
   // Re-seed local state only when the query hands us a genuinely new dataset
   // (contest change / focus refetch). TanStack's structural sharing keeps the
@@ -83,12 +94,19 @@ export function Deck({
       setError('Could not save your swipe. Check your connection and try again.');
     } finally {
       busyRef.current = false;
+      clearWatchdog();
     }
   }
 
   function handleButton(direction: SwipeDirection) {
     if (busyRef.current || stack.length === 0) return;
     busyRef.current = true;
+    // Arm the failsafe: the normal path clears this in handleSwipe's finally.
+    clearWatchdog();
+    watchdogRef.current = setTimeout(() => {
+      busyRef.current = false;
+      watchdogRef.current = null;
+    }, 2000);
     topCardRef.current?.swipe(direction);
   }
 

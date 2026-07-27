@@ -1,4 +1,11 @@
-import { forwardRef, useCallback, useImperativeHandle, useMemo } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -15,7 +22,7 @@ import { CardContent } from './CardContent';
 import type { CompetitionHistoryRow, DeckCard, SwipeDirection } from './types';
 
 // Imperative handle so the LIKE/PASS buttons can drive the *same* fly-off
-// animation + completion path as a gesture flick (single code path).
+// animation + commit path as a gesture flick (single code path).
 export type SwipeCardHandle = {
   swipe: (direction: SwipeDirection) => void;
 };
@@ -26,8 +33,8 @@ type SwipeCardProps = {
   width: number;
   height: number;
   isTop: boolean;
-  // Called once, on the UI thread's animation completion, exactly when the card
-  // has left the screen. Both the gesture and the buttons resolve here.
+  // Called once, ~one fly-off duration after a swipe is committed (by gesture or
+  // button), i.e. as the card leaves the screen. Both paths resolve here.
   onSwiped: (direction: SwipeDirection) => void;
 };
 
@@ -41,18 +48,35 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
     const threshold = width * 0.28;
 
     // THE single commit path. Called by the gesture (via runOnJS) and by the
-    // buttons (via the imperative handle). Animates off-screen, then resolves.
+    // buttons (via the imperative handle). Kicks off the visual fly-off, then
+    // resolves via onSwiped.
+    //
+    // The commit is scheduled on a plain JS timer, NOT on reanimated's animation
+    // completion callback. On web (Expo SDK 57 / reanimated 4 / worklets 0.10),
+    // reanimated's shared-value animations do not run in the browser bundle, so
+    // that completion callback never fired — which silently dropped the swipe and
+    // left the buttons' busy-lock stuck. A timer fires on every platform, so the
+    // swipe always commits; the reanimated fly-off is purely the (native) visual.
+    const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const triggerSwipe = useCallback(
       (direction: SwipeDirection) => {
         const toX = (direction === 'like' ? 1 : -1) * width * OFFSCREEN_MULTIPLIER;
-        translateX.value = withTiming(toX, { duration: FLY_DURATION_MS }, (finished) => {
-          if (finished) runOnJS(onSwiped)(direction);
-        });
+        translateX.value = withTiming(toX, { duration: FLY_DURATION_MS });
+        if (commitTimer.current) clearTimeout(commitTimer.current);
+        commitTimer.current = setTimeout(() => onSwiped(direction), FLY_DURATION_MS);
       },
       [width, onSwiped, translateX]
     );
 
     useImperativeHandle(ref, () => ({ swipe: triggerSwipe }), [triggerSwipe]);
+
+    // Never leave a pending commit behind if the card unmounts mid-fly-off.
+    useEffect(
+      () => () => {
+        if (commitTimer.current) clearTimeout(commitTimer.current);
+      },
+      []
+    );
 
     const pan = useMemo(
       () =>

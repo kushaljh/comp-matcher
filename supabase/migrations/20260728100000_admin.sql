@@ -22,10 +22,12 @@
 -- or a direct SQL statement — i.e. a human with service-role/DB access.
 --
 -- Cascade note: admins DELETE events (reject) and contests. Both tables have
--- existing FK ON DELETE CASCADE children (contests -> events; entries/swipes
--- -> contests; matches -> profiles, unaffected here). Postgres referential-
--- integrity cascade actions always bypass RLS, so no additional admin policy
--- is needed on entries/swipes/matches for these deletes to cascade correctly.
+-- existing FK ON DELETE CASCADE children: deleting an event cascades to its
+-- contests; deleting a contest cascades to its entries, swipes, AND matches
+-- (matches.contest_id also references contests ON DELETE CASCADE). Postgres
+-- referential-integrity cascade actions always bypass RLS, so no additional
+-- admin policy is needed on entries/swipes/matches for these deletes to
+-- cascade correctly.
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------

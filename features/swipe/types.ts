@@ -4,6 +4,7 @@ import type { Database } from '../../lib/database.types';
 
 export type SwipeDirection = Database['public']['Enums']['swipe_direction'];
 export type Division = Database['public']['Enums']['division'];
+export type DanceRole = Database['public']['Enums']['dance_role'];
 
 // A single candidate as returned by the get_deck() RPC.
 export type DeckCard = Database['public']['Functions']['get_deck']['Returns'][number];
@@ -20,8 +21,21 @@ export type MyEntry = {
   division: Division;
 };
 
-// Minimal shape needed to render a face in the "It's a match!" overlay.
+// Minimal shape needed to render a face in the match celebration.
 export type MatchFace = {
   displayName: string;
   photoUrl: string | null;
+};
+
+// The caller's own profile, as the floor needs it: a face for the celebration
+// plus the role, which is what tells us the *candidates'* role (get_deck only
+// ever returns the opposite one).
+export type MyProfileFace = MatchFace & { role: DanceRole };
+
+// One committed swipe, remembered locally so "take back a pass" can put the
+// card back. Likes are kept too — the floor has to know the last action was a
+// like in order to refuse the undo.
+export type UndoEntry = {
+  card: DeckCard;
+  direction: SwipeDirection;
 };

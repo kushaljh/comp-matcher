@@ -1,49 +1,72 @@
-import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Button } from '../../theme/components';
-import { colors, fontSizes, fontWeights, radii, spacing } from '../../theme/tokens';
-import { findMatch, insertSwipe } from './data';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme } from '../../theme/ThemeProvider';
+import { deckKey, deleteOwnPass, findMatch, insertSwipe, statsKey } from './data';
+import { Bulbs } from './Decor';
+import { ExpandedCard } from './ExpandedCard';
 import { MatchOverlay } from './MatchOverlay';
 import { SwipeCard, type SwipeCardHandle } from './SwipeCard';
+import { withAlpha } from './tint';
 import type {
   CompetitionHistoryRow,
   DeckCard,
   MatchFace,
   SwipeDirection,
+  UndoEntry,
 } from './types';
 
 type DeckProps = {
   cards: DeckCard[];
   historyByProfile: Record<string, CompetitionHistoryRow[]>;
   contestId: string;
+  contestName: string;
+  eventName: string;
   myProfileId: string;
   myFace: MatchFace;
+  /** "Follower · novice" for every card in this deck, or just the division. */
+  roleLine: string;
   cardWidth: number;
-  cardHeight: number;
   onSeeMatches: () => void;
   onGoToEvents: () => void;
+  onRemainingChange: (remaining: number) => void;
 };
+
+const LIKE_UNDO_NOTICE =
+  "That ask is already on their card — retract it from your dance card.";
+const NOTICE_MS = 3600;
 
 export function Deck({
   cards,
   historyByProfile,
   contestId,
+  contestName,
+  eventName,
   myProfileId,
   myFace,
+  roleLine,
   cardWidth,
-  cardHeight,
   onSeeMatches,
   onGoToEvents,
+  onRemainingChange,
 }: DeckProps) {
+  const { colors, fonts, fs, radii } = useTheme();
+  const queryClient = useQueryClient();
+
   const [stack, setStack] = useState<DeckCard[]>(cards);
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const [matchedFace, setMatchedFace] = useState<MatchFace | null>(null);
   const topCardRef = useRef<SwipeCardHandle>(null);
+
   // Guards against button double-fire on a card that is still mid-fly-off.
   const busyRef = useRef(false);
   // Failsafe timer that releases busyRef even if a swipe never resolves, so the
   // buttons can never be permanently bricked by a stuck animation.
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noticeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function clearWatchdog() {
     if (watchdogRef.current) {
@@ -51,7 +74,19 @@ export function Deck({
       watchdogRef.current = null;
     }
   }
-  useEffect(() => clearWatchdog, []);
+  useEffect(
+    () => () => {
+      clearWatchdog();
+      if (noticeRef.current) clearTimeout(noticeRef.current);
+    },
+    []
+  );
+
+  const showNotice = useCallback((text: string) => {
+    if (noticeRef.current) clearTimeout(noticeRef.current);
+    setNotice(text);
+    noticeRef.current = setTimeout(() => setNotice(null), NOTICE_MS);
+  }, []);
 
   // Re-seed local state only when the query hands us a genuinely new dataset
   // (contest change / focus refetch). TanStack's structural sharing keeps the
@@ -65,12 +100,19 @@ export function Deck({
     }
   }, [cards]);
 
-  // The one place a swipe is committed. Reached identically by a gesture flick
-  // and by the LIKE/PASS buttons (both call SwipeCard's fly-off animation, which
-  // resolves here once the card has left the screen).
+  useEffect(() => {
+    onRemainingChange(stack.length);
+  }, [stack.length, onRemainingChange]);
+
+  // The one place a swipe is committed. Reached identically by a gesture flick,
+  // the ✕ / ✓ buttons and the keyboard shortcuts (all three call SwipeCard's
+  // fly-off, which resolves here once the card has left the screen).
   async function handleSwipe(card: DeckCard, direction: SwipeDirection) {
     setError(null);
+    setNotice(null);
+    setExpanded(false);
     setStack((prev) => prev.filter((c) => c.profile_id !== card.profile_id));
+    setUndoStack((prev) => [...prev, { card, direction }]);
     try {
       await insertSwipe({
         contestId,
@@ -78,6 +120,7 @@ export function Deck({
         targetProfileId: card.profile_id,
         direction,
       });
+      queryClient.invalidateQueries({ queryKey: statsKey(contestId, myProfileId) });
       if (direction === 'like') {
         const matched = await findMatch({
           contestId,
@@ -91,6 +134,7 @@ export function Deck({
     } catch {
       // Persistence failed — put the card back on top and surface the error.
       setStack((prev) => [card, ...prev]);
+      setUndoStack((prev) => prev.slice(0, -1));
       setError('Could not save your swipe. Check your connection and try again.');
     } finally {
       busyRef.current = false;
@@ -98,7 +142,7 @@ export function Deck({
     }
   }
 
-  function handleButton(direction: SwipeDirection) {
+  const commit = useCallback((direction: SwipeDirection) => {
     if (busyRef.current || stack.length === 0) return;
     busyRef.current = true;
     // Arm the failsafe: the normal path clears this in handleSwipe's finally.
@@ -107,94 +151,313 @@ export function Deck({
       busyRef.current = false;
       watchdogRef.current = null;
     }, 2000);
+    setExpanded(false);
     topCardRef.current?.swipe(direction);
-  }
+  }, [stack.length]);
+
+  // Take back a pass. The DB lets us delete our own pass rows and nothing else,
+  // so a like gets the design's notice instead of a delete.
+  const undo = useCallback(async () => {
+    const last = undoStack[undoStack.length - 1];
+    if (!last || busyRef.current) return;
+    if (last.direction === 'like') {
+      showNotice(LIKE_UNDO_NOTICE);
+      return;
+    }
+    // Pop first: a double-tap can then never delete or reinsert twice.
+    setUndoStack((prev) => prev.slice(0, -1));
+    setExpanded(false);
+    setNotice(null);
+    setError(null);
+    setStack((prev) =>
+      prev.some((c) => c.profile_id === last.card.profile_id) ? prev : [last.card, ...prev]
+    );
+    try {
+      await deleteOwnPass({
+        contestId,
+        swiperProfileId: myProfileId,
+        targetProfileId: last.card.profile_id,
+      });
+      // Mark the deck stale without pulling a fresh page right now: get_deck has
+      // no ORDER BY, so an immediate refetch could drop the recovered card back
+      // into the middle of the pile. The next screen focus reconciles.
+      queryClient.invalidateQueries({ queryKey: deckKey(contestId), refetchType: 'none' });
+    } catch {
+      setStack((prev) => prev.filter((c) => c.profile_id !== last.card.profile_id));
+      setUndoStack((prev) => [...prev, last]);
+      setError('Could not take back that pass. Check your connection and try again.');
+    }
+  }, [undoStack, contestId, myProfileId, queryClient, showNotice]);
 
   const top = stack[0];
-  const peek = stack[1];
+  const lastAction = undoStack[undoStack.length - 1];
+  const canUndo = !!lastAction && lastAction.direction === 'pass';
+
+  // ---------------------------------------------------------------------------
+  // Keyboard shortcuts (web only). Inert while a text field has focus, and the
+  // match celebration swallows everything but Escape.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+        return;
+      }
+      if (matchedFace) {
+        if (e.key === 'Escape') setMatchedFace(null);
+        return;
+      }
+      if (expanded && (e.key === 'Escape' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        setExpanded(false);
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        commit('pass');
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        commit('like');
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (stack.length > 0) setExpanded(true);
+      } else if (e.key === 'z' || e.key === 'Z') {
+        e.preventDefault();
+        undo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [commit, undo, expanded, matchedFace, stack.length]);
+
+  const statusLine = top
+    ? `${stack.length} of ${Math.max(cards.length, stack.length)} still on the floor · drag or use the buttons`
+    : 'Floor cleared';
 
   return (
-    <View style={styles.container}>
-      <View
-        style={[styles.deckArea, { width: cardWidth, height: cardHeight + 20 }]}
-      >
-        {stack.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>You&apos;re all caught up</Text>
-            <Text style={styles.emptyBody}>
-              No more candidates in this contest right now — check back later, or
-              enter another contest.
+    <View style={styles.column}>
+      <View style={[styles.deckArea, { width: cardWidth }]}>
+        {stack.length > 2 ? (
+          <View
+            style={[
+              styles.peek,
+              styles.peekDeep,
+              { backgroundColor: colors.surface, borderRadius: radii.r, borderColor: colors.line },
+            ]}
+          />
+        ) : null}
+        {stack.length > 1 ? (
+          <View
+            style={[
+              styles.peek,
+              styles.peekNear,
+              { backgroundColor: colors.photoBg, borderRadius: radii.r, borderColor: colors.line },
+            ]}
+          />
+        ) : null}
+
+        {top ? (
+          <SwipeCard
+            key={top.profile_id}
+            ref={topCardRef}
+            card={top}
+            roleLine={roleLine}
+            width={cardWidth}
+            onSwiped={(direction) => handleSwipe(top, direction)}
+            onTapMiddle={() => setExpanded(true)}
+          />
+        ) : (
+          <View
+            style={[
+              styles.empty,
+              { borderRadius: radii.r, borderColor: colors.line, backgroundColor: colors.likeBg },
+            ]}
+          >
+            <Bulbs count={7} />
+            <Text
+              style={{
+                fontFamily: fonts.display,
+                fontSize: fs(26),
+                lineHeight: fs(32),
+                letterSpacing: 1.1,
+                color: colors.ink,
+                textAlign: 'center',
+              }}
+            >
+              That&apos;s the whole floor
             </Text>
-            <View style={styles.emptyAction}>
-              <Button title="Browse events" variant="secondary" onPress={onGoToEvents} />
+            <Text
+              style={{
+                fontFamily: fonts.body,
+                fontSize: fs(14.5),
+                lineHeight: fs(23),
+                color: colors.ink2,
+                textAlign: 'center',
+                maxWidth: 310,
+              }}
+            >
+              Everyone entered in {contestName} has had their turn. New entries land here
+              as they register.
+            </Text>
+            <View style={styles.emptyActions}>
+              <Pressable
+                onPress={undo}
+                disabled={!canUndo}
+                accessibilityRole="button"
+                style={[
+                  styles.emptyButton,
+                  {
+                    borderRadius: radii.rSm,
+                    borderColor: canUndo ? colors.brass : colors.line,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.emptyButtonText,
+                    {
+                      fontFamily: fonts.condensedSemi,
+                      fontSize: fs(13),
+                      color: canUndo ? colors.brass : colors.ink2,
+                    },
+                  ]}
+                >
+                  Take back a pass
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={onGoToEvents}
+                accessibilityRole="button"
+                style={[styles.emptyButton, { borderRadius: radii.rSm, borderColor: colors.line }]}
+              >
+                <Text
+                  style={[
+                    styles.emptyButtonText,
+                    { fontFamily: fonts.condensedSemi, fontSize: fs(13), color: colors.ink },
+                  ]}
+                >
+                  Another program
+                </Text>
+              </Pressable>
             </View>
           </View>
-        ) : (
-          <>
-            {peek ? (
-              <SwipeCard
-                key={peek.profile_id}
-                card={peek}
-                history={historyByProfile[peek.profile_id] ?? []}
-                width={cardWidth}
-                height={cardHeight}
-                isTop={false}
-                onSwiped={() => {}}
-              />
-            ) : null}
-            {top ? (
-              <SwipeCard
-                key={top.profile_id}
-                ref={topCardRef}
-                card={top}
-                history={historyByProfile[top.profile_id] ?? []}
-                width={cardWidth}
-                height={cardHeight}
-                isTop
-                onSwiped={(direction) => handleSwipe(top, direction)}
-              />
-            ) : null}
-          </>
         )}
+
+        {top && expanded ? (
+          <ExpandedCard
+            card={top}
+            history={historyByProfile[top.profile_id] ?? []}
+            roleLine={roleLine}
+            onClose={() => setExpanded(false)}
+          />
+        ) : null}
       </View>
 
       {error ? (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{error}</Text>
+        <View style={[styles.errorBanner, { borderColor: colors.red, borderRadius: radii.rSm }]}>
+          <Text style={{ fontFamily: fonts.body, fontSize: fs(13), color: colors.red, textAlign: 'center' }}>
+            {error}
+          </Text>
         </View>
       ) : null}
 
-      {stack.length > 0 ? (
-        <View style={styles.buttons}>
-          <Pressable
-            accessibilityLabel="Pass"
-            onPress={() => handleButton('pass')}
-            style={({ pressed }) => [
+      <View style={styles.actions}>
+        <Pressable
+          accessibilityLabel="Sit this one out"
+          accessibilityRole="button"
+          onPress={() => commit('pass')}
+          style={({ pressed }) => [
+            styles.halo,
+            { backgroundColor: withAlpha(colors.red, 0.1) },
+            pressed && styles.pressed,
+          ]}
+        >
+          <View style={[styles.circle, styles.circleLg, { borderColor: colors.red }]}>
+            <Text style={{ fontFamily: fonts.body, fontSize: fs(21), lineHeight: fs(26), color: colors.red }}>
+              ✕
+            </Text>
+          </View>
+        </Pressable>
+
+        <Pressable
+          accessibilityLabel="Take back a pass"
+          accessibilityRole="button"
+          onPress={undo}
+          disabled={!canUndo}
+          style={({ pressed }) => [pressed && canUndo && styles.pressed]}
+        >
+          <View
+            style={[
               styles.circle,
-              styles.passCircle,
-              pressed && styles.pressed,
+              styles.circleSm,
+              { borderColor: canUndo ? colors.line : withAlpha(colors.brass, 0.12) },
             ]}
           >
-            <Text style={[styles.circleGlyph, styles.passGlyph]}>✗</Text>
-          </Pressable>
-          <Pressable
-            accessibilityLabel="Like"
-            onPress={() => handleButton('like')}
-            style={({ pressed }) => [
+            <Text
+              style={{
+                fontFamily: fonts.body,
+                fontSize: fs(16),
+                lineHeight: fs(20),
+                color: canUndo ? colors.ink2 : withAlpha(colors.ink2, 0.35),
+              }}
+            >
+              ↺
+            </Text>
+          </View>
+        </Pressable>
+
+        <Pressable
+          accessibilityLabel="Ask 'em to dance"
+          accessibilityRole="button"
+          onPress={() => commit('like')}
+          style={({ pressed }) => [
+            styles.halo,
+            { backgroundColor: colors.likeBg },
+            pressed && styles.pressed,
+          ]}
+        >
+          <View
+            style={[
               styles.circle,
-              styles.likeCircle,
-              pressed && styles.pressed,
+              styles.circleLg,
+              { borderColor: colors.brass, backgroundColor: colors.likeBg },
             ]}
           >
-            <Text style={[styles.circleGlyph, styles.likeGlyph]}>✓</Text>
-          </Pressable>
-        </View>
-      ) : null}
+            <Text style={{ fontFamily: fonts.body, fontSize: fs(21), lineHeight: fs(26), color: colors.brass }}>
+              ✓
+            </Text>
+          </View>
+        </Pressable>
+      </View>
+
+      <View style={styles.statusRow}>
+        {notice ? (
+          <View
+            style={[
+              styles.noticePill,
+              { borderColor: colors.line, backgroundColor: colors.likeBg, borderRadius: radii.pill },
+            ]}
+          >
+            <Text
+              style={[styles.micro, { fontFamily: fonts.mono, fontSize: fs(9.5), color: colors.brass }]}
+            >
+              {notice}
+            </Text>
+          </View>
+        ) : (
+          <Text style={[styles.micro, { fontFamily: fonts.mono, fontSize: fs(9), color: colors.ink2 }]}>
+            {statusLine}
+          </Text>
+        )}
+      </View>
 
       {matchedFace ? (
         <MatchOverlay
           me={myFace}
           them={matchedFace}
+          contestName={contestName}
+          eventName={eventName}
           onKeepSwiping={() => setMatchedFace(null)}
           onSeeMatches={() => {
             setMatchedFace(null);
@@ -207,87 +470,102 @@ export function Deck({
 }
 
 const styles = StyleSheet.create({
-  container: {
+  column: {
     flex: 1,
+    minHeight: 0,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.lg,
+    gap: 12,
   },
   deckArea: {
     position: 'relative',
+    flex: 1,
+    minHeight: 280,
+    maxHeight: 566,
     alignSelf: 'center',
   },
+  peek: {
+    ...StyleSheet.absoluteFill,
+    borderWidth: 1,
+  },
+  peekNear: {
+    transform: [{ scale: 0.95 }, { translateY: 13 }],
+  },
+  peekDeep: {
+    opacity: 0.34,
+    transform: [{ scale: 0.9 }, { translateY: 26 }],
+  },
   empty: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFill,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.lg,
-    gap: spacing.sm,
+    padding: 34,
+    gap: 16,
   },
-  emptyTitle: {
-    fontSize: fontSizes.lg,
-    fontWeight: fontWeights.bold,
-    color: colors.textPrimary,
-    textAlign: 'center',
+  emptyActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'center',
   },
-  emptyBody: {
-    fontSize: fontSizes.sm,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: fontSizes.sm * 1.4,
+  emptyButton: {
+    borderWidth: 1,
+    paddingTop: 11,
+    paddingBottom: 9,
+    paddingHorizontal: 20,
   },
-  emptyAction: {
-    marginTop: spacing.sm,
+  emptyButtonText: {
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
   errorBanner: {
-    backgroundColor: colors.red,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     maxWidth: 420,
   },
-  errorText: {
-    color: colors.textInverse,
-    fontSize: fontSizes.sm,
-    textAlign: 'center',
-  },
-  buttons: {
+  actions: {
     flexDirection: 'row',
-    gap: spacing.xl,
+    gap: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  halo: {
+    borderRadius: 999,
+    padding: 6,
   },
   circle: {
-    width: 64,
-    height: 64,
-    borderRadius: radii.pill,
-    borderWidth: 2,
-    backgroundColor: colors.white,
+    borderRadius: 999,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  passCircle: {
-    borderColor: colors.red,
+  circleLg: {
+    width: 64,
+    height: 64,
   },
-  likeCircle: {
-    borderColor: colors.brass,
+  circleSm: {
+    width: 46,
+    height: 46,
   },
   pressed: {
     opacity: 0.7,
   },
-  circleGlyph: {
-    fontSize: fontSizes.xl,
-    fontWeight: fontWeights.bold,
-    lineHeight: fontSizes.xl + 2,
+  statusRow: {
+    minHeight: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
-  passGlyph: {
-    color: colors.red,
+  noticePill: {
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    maxWidth: 380,
   },
-  likeGlyph: {
-    color: colors.brass,
+  micro: {
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    textAlign: 'center',
   },
 });

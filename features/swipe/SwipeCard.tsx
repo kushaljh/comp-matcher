@@ -17,39 +17,86 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { colors, fontSizes, fontWeights, radii, spacing } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 import { CardContent } from './CardContent';
-import type { CompetitionHistoryRow, DeckCard, SwipeDirection } from './types';
+import { withAlpha } from './tint';
+import type { DeckCard, SwipeDirection } from './types';
 
-// Imperative handle so the LIKE/PASS buttons can drive the *same* fly-off
-// animation + commit path as a gesture flick (single code path).
+// Imperative handle so the ✕ / ✓ buttons and the keyboard shortcuts drive the
+// *same* fly-off animation + commit path as a gesture flick (single code path).
 export type SwipeCardHandle = {
   swipe: (direction: SwipeDirection) => void;
 };
 
 type SwipeCardProps = {
   card: DeckCard;
-  history: CompetitionHistoryRow[];
+  roleLine: string;
+  /** Card width — drives the fling threshold and the fly-off distance only. */
   width: number;
-  height: number;
-  isTop: boolean;
-  // Called once, ~one fly-off duration after a swipe is committed (by gesture or
-  // button), i.e. as the card leaves the screen. Both paths resolve here.
+  // Called once, ~one fly-off duration after a swipe is committed (by gesture,
+  // button or key), i.e. as the card leaves the screen. Every path resolves here.
   onSwiped: (direction: SwipeDirection) => void;
+  /** A tap that landed in the middle band of the card. */
+  onTapMiddle: () => void;
 };
 
-const OFFSCREEN_MULTIPLIER = 1.6;
+const OFFSCREEN_MULTIPLIER = 1.7;
 const FLY_DURATION_MS = 240;
 
+// The design's stamps: rotated pill outlines that fade in with the drag.
+function Stamp({
+  label,
+  color,
+  side,
+  style,
+}: {
+  label: string;
+  color: string;
+  side: 'left' | 'right';
+  style: object;
+}) {
+  const { fonts, fs, radii } = useTheme();
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.stampHalo,
+        side === 'left' ? styles.stampLeft : styles.stampRight,
+        {
+          backgroundColor: withAlpha(color, 0.14),
+          borderRadius: radii.pill,
+          transform: [{ rotate: side === 'left' ? '-15deg' : '15deg' }],
+        },
+        style,
+      ]}
+    >
+      <View style={[styles.stamp, { borderColor: color, borderRadius: radii.pill }]}>
+        <Text
+          style={{
+            fontFamily: fonts.display,
+            fontSize: fs(19),
+            lineHeight: fs(24),
+            letterSpacing: 1.7,
+            color,
+          }}
+        >
+          {label}
+        </Text>
+      </View>
+    </Animated.View>
+  );
+}
+
 export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
-  ({ card, history, width, height, isTop, onSwiped }, ref) => {
+  ({ card, roleLine, width, onSwiped, onTapMiddle }, ref) => {
+    const { colors, radii, reduceMotion } = useTheme();
     const translateX = useSharedValue(0);
     const translateY = useSharedValue(0);
-    const threshold = width * 0.28;
+    const threshold = width * 0.26;
 
     // THE single commit path. Called by the gesture (via runOnJS) and by the
-    // buttons (via the imperative handle). Kicks off the visual fly-off, then
-    // resolves via onSwiped.
+    // buttons / keys (via the imperative handle). Kicks off the visual fly-off,
+    // then resolves via onSwiped.
     //
     // The commit is scheduled on a plain JS timer, NOT on reanimated's animation
     // completion callback. On web (Expo SDK 57 / reanimated 4 / worklets 0.10),
@@ -60,12 +107,13 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
     const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const triggerSwipe = useCallback(
       (direction: SwipeDirection) => {
+        const duration = reduceMotion ? 0 : FLY_DURATION_MS;
         const toX = (direction === 'like' ? 1 : -1) * width * OFFSCREEN_MULTIPLIER;
-        translateX.value = withTiming(toX, { duration: FLY_DURATION_MS });
+        translateX.value = withTiming(toX, { duration });
         if (commitTimer.current) clearTimeout(commitTimer.current);
-        commitTimer.current = setTimeout(() => onSwiped(direction), FLY_DURATION_MS);
+        commitTimer.current = setTimeout(() => onSwiped(direction), duration);
       },
-      [width, onSwiped, translateX]
+      [width, onSwiped, translateX, reduceMotion]
     );
 
     useImperativeHandle(ref, () => ({ swipe: triggerSwipe }), [triggerSwipe]);
@@ -78,32 +126,40 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
       []
     );
 
-    const pan = useMemo(
-      () =>
-        Gesture.Pan()
-          .enabled(isTop)
-          .onUpdate((e) => {
-            'worklet';
-            translateX.value = e.translationX;
-            translateY.value = e.translationY;
-          })
-          .onEnd((e) => {
-            'worklet';
-            if (Math.abs(e.translationX) > threshold) {
-              runOnJS(triggerSwipe)(e.translationX > 0 ? 'like' : 'pass');
-            } else {
-              translateX.value = withSpring(0);
-              translateY.value = withSpring(0);
-            }
-          }),
-      [isTop, threshold, triggerSwipe, translateX, translateY]
-    );
+    const gesture = useMemo(() => {
+      const pan = Gesture.Pan()
+        .onUpdate((e) => {
+          'worklet';
+          translateX.value = e.translationX;
+          translateY.value = e.translationY * 0.5;
+        })
+        .onEnd((e) => {
+          'worklet';
+          if (Math.abs(e.translationX) > threshold) {
+            runOnJS(triggerSwipe)(e.translationX > 0 ? 'like' : 'pass');
+          } else {
+            translateX.value = withSpring(0);
+            translateY.value = withSpring(0);
+          }
+        });
+      // Only the middle band opens the full card, per the design (the outer
+      // thirds are its photo-paging zones, which we have no gallery for).
+      const tap = Gesture.Tap()
+        .maxDistance(8)
+        .onEnd((e, success) => {
+          'worklet';
+          if (!success) return;
+          const rel = e.x / width;
+          if (rel > 0.3 && rel < 0.7) runOnJS(onTapMiddle)();
+        });
+      return Gesture.Exclusive(pan, tap);
+    }, [threshold, triggerSwipe, translateX, translateY, onTapMiddle, width]);
 
     const cardStyle = useAnimatedStyle(() => {
       const rotate = interpolate(
         translateX.value,
         [-width, 0, width],
-        [-8, 0, 8],
+        [-11, 0, 11],
         Extrapolation.CLAMP
       );
       return {
@@ -115,41 +171,26 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
       };
     });
 
-    const likeBadgeStyle = useAnimatedStyle(() => ({
+    const likeStampStyle = useAnimatedStyle(() => ({
       opacity: interpolate(translateX.value, [0, threshold], [0, 1], Extrapolation.CLAMP),
     }));
-    const passBadgeStyle = useAnimatedStyle(() => ({
+    const passStampStyle = useAnimatedStyle(() => ({
       opacity: interpolate(translateX.value, [-threshold, 0], [1, 0], Extrapolation.CLAMP),
     }));
 
-    const dims = { width, height };
-
-    // Peek card: static, scaled-back, non-interactive, sitting behind the top.
-    if (!isTop) {
-      return (
-        <View style={[styles.cardBase, dims, styles.peek]} pointerEvents="none">
-          <CardContent card={card} history={history} />
-        </View>
-      );
-    }
-
     return (
-      <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.cardBase, dims, cardStyle]}>
-          <CardContent card={card} history={history} />
-
-          <Animated.View
-            style={[styles.badge, styles.likeBadge, likeBadgeStyle]}
-            pointerEvents="none"
-          >
-            <Text style={[styles.badgeText, styles.likeText]}>LIKE</Text>
-          </Animated.View>
-          <Animated.View
-            style={[styles.badge, styles.passBadge, passBadgeStyle]}
-            pointerEvents="none"
-          >
-            <Text style={[styles.badgeText, styles.passText]}>PASS</Text>
-          </Animated.View>
+      <GestureDetector gesture={gesture}>
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            styles.card,
+            { backgroundColor: colors.surface, borderRadius: radii.r, borderColor: colors.cardLine },
+            cardStyle,
+          ]}
+        >
+          <CardContent card={card} roleLine={roleLine} />
+          <Stamp label="Ask 'em" color={colors.brass} side="left" style={likeStampStyle} />
+          <Stamp label="Sit out" color={colors.red} side="right" style={passStampStyle} />
         </Animated.View>
       </GestureDetector>
     );
@@ -159,41 +200,26 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
 SwipeCard.displayName = 'SwipeCard';
 
 const styles = StyleSheet.create({
-  cardBase: {
+  card: {
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  stampHalo: {
     position: 'absolute',
-    top: 0,
-    left: 0,
+    top: 48,
+    padding: 4,
+    zIndex: 4,
   },
-  peek: {
-    transform: [{ scale: 0.94 }, { translateY: 14 }],
+  stampLeft: {
+    left: 22,
   },
-  badge: {
-    position: 'absolute',
-    top: spacing.lg,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: 3,
+  stampRight: {
+    right: 22,
   },
-  likeBadge: {
-    left: spacing.md,
-    borderColor: colors.brass,
-    transform: [{ rotate: '-14deg' }],
-  },
-  passBadge: {
-    right: spacing.md,
-    borderColor: colors.red,
-    transform: [{ rotate: '14deg' }],
-  },
-  badgeText: {
-    fontSize: fontSizes.lg,
-    fontWeight: fontWeights.bold,
-    letterSpacing: 2,
-  },
-  likeText: {
-    color: colors.brass,
-  },
-  passText: {
-    color: colors.red,
+  stamp: {
+    borderWidth: 2,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(10,14,19,0.5)',
   },
 });

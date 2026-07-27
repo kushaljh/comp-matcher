@@ -1,9 +1,11 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, Screen, TextField } from '../../../theme/components';
 import { colors, fontSizes, fontWeights, radii, spacing } from '../../../theme/tokens';
+import { useIsAdmin } from '../../../features/admin/hooks';
 import { ContactsSection } from '../../../features/profile/components/ContactsSection';
 import { EntriesSection } from '../../../features/profile/components/EntriesSection';
 import { HistorySection } from '../../../features/profile/components/HistorySection';
@@ -24,8 +26,10 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { data: profile, profileId, isLoading, isError, error } = useMyProfile();
   const { data: userId } = useCurrentUserId();
+  const { data: isAdmin } = useIsAdmin();
 
   const updateProfile = useUpdateProfile(profileId);
   const uploadPhoto = useUploadPhoto(profileId, userId ?? undefined);
@@ -176,6 +180,12 @@ export default function ProfileScreen() {
         <Card style={styles.section}>
           <EntriesSection profileId={profileId} />
         </Card>
+
+        {isAdmin ? (
+          <Card style={styles.section}>
+            <Button title="Admin" variant="secondary" onPress={() => router.push('/profile/admin')} />
+          </Card>
+        ) : null}
 
         <View style={styles.accountActions}>
           <Button title="Sign out" variant="secondary" onPress={handleSignOut} />

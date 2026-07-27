@@ -206,10 +206,12 @@ export default function TabsLayout() {
                 name={item.name}
                 options={{
                   title: item.label,
+                  // The tab bar hands the button its focus state as
+                  // `aria-selected` (not accessibilityState), so read that.
                   tabBarButton: (props) => (
                     <TabBarButton
                       label={item.label}
-                      focused={props.accessibilityState?.selected ?? false}
+                      focused={props['aria-selected'] === true}
                       onPress={props.onPress}
                     />
                   ),

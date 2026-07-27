@@ -105,6 +105,29 @@ export default function OnboardingScreen() {
   async function handleSubmit() {
     if (!session || !photoUri || !role) return;
     setSubmitError(null);
+
+    // A history row the user started filling must be complete (or emptied) —
+    // silently dropping it would lose data they typed. Fully blank rows are
+    // ignored. Year is required: the same events run every year.
+    const partialRow = history.find((h) => {
+      const touched =
+        h.event_name.trim() || h.contest_name.trim() || h.year.trim() || h.placement.trim();
+      if (!touched) return false;
+      const year = Number.parseInt(h.year, 10);
+      return (
+        !h.event_name.trim() ||
+        !h.contest_name.trim() ||
+        !Number.isFinite(year) ||
+        year < 1900
+      );
+    });
+    if (partialRow) {
+      setSubmitError(
+        'One of your competition-history rows is incomplete — event, contest, and a valid year are all required (or clear the row).'
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       const filledHistory = history
@@ -137,7 +160,7 @@ export default function OnboardingScreen() {
       // this navigation) sees hasProfile=true instead of a stale cached
       // `false`, which would otherwise bounce us straight back here.
       queryClient.setQueryData(hasProfileQueryKey(session.user.id), true);
-      router.replace('/(tabs)/events');
+      router.replace('/(tabs)/swipe');
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {

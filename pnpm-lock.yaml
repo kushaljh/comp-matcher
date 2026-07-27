@@ -8,6 +8,21 @@ importers:
 
   .:
     dependencies:
+      '@expo-google-fonts/barlow':
+        specifier: ^0.4.1
+        version: 0.4.1
+      '@expo-google-fonts/barlow-semi-condensed':
+        specifier: ^0.4.1
+        version: 0.4.1
+      '@expo-google-fonts/dm-serif-display':
+        specifier: ^0.4.2
+        version: 0.4.2
+      '@expo-google-fonts/limelight':
+        specifier: ^0.4.1
+        version: 0.4.1
+      '@expo-google-fonts/poiret-one':
+        specifier: ^0.4.1
+        version: 0.4.1
       '@expo/metro-runtime':
         specifier: ~57.0.7
         version: 57.0.7(@expo/log-box@57.0.1)(expo@57.0.8)(react-dom@19.2.3(react@19.2.3))(react-native@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)
@@ -26,6 +41,9 @@ importers:
       expo-constants:
         specifier: ~57.0.7
         version: 57.0.7(expo@57.0.8)(react-native@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.3)(supports-color@8.1.1))(supports-color@8.1.1)
+      expo-font:
+        specifier: ~57.0.1
+        version: 57.0.1(expo@57.0.8)(react-native@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)
       expo-image:
         specifier: ~57.0.1
         version: 57.0.1(expo@57.0.8)(react-native-web@0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-native@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)
@@ -479,8 +497,23 @@ packages:
     resolution: {integrity: sha512-XQsZgjm2EcVUiZQf11UBJQfmZeEmOW8DpI1gsFeln6w0ae0ii4dMQEQ0kjl6DspdWX1aGY1/loyXnP0JS06e/A==}
     engines: {node: '>=0.8.0'}
 
+  '@expo-google-fonts/barlow-semi-condensed@0.4.1':
+    resolution: {integrity: sha512-L22y4aj2diDuSFDYIAxmP+PwhdNThE0XDjCUL3GLa8H4Ag6SsRem5j7WFl9qvrrtXeSygW9Az5YsS2oOgXOBRA==}
+
+  '@expo-google-fonts/barlow@0.4.1':
+    resolution: {integrity: sha512-ARAwBvQFGxOt2dfoQRVDRZghaStrXTIyI7oBD6/J4z2Iyr+0ME2HJq13RFhTuagCFrT4iapzuKHwOR3iLrNJrA==}
+
+  '@expo-google-fonts/dm-serif-display@0.4.2':
+    resolution: {integrity: sha512-onlO8xAzsgMbKcwUE+fAgJ5AFHhk06VtaDN7eQOJwjV65QIciDKTiSNu1ymHc4m6g/x6D9OqPIYPXdTNIfaEaA==}
+
+  '@expo-google-fonts/limelight@0.4.1':
+    resolution: {integrity: sha512-EaBBA4+JIs8RZ8hcUVyskGRvGb8kS3SmINsCJkiSmFHeacoItgt6OE44RdU98zGju7aI5WaOHIqmoraAmxnQgA==}
+
   '@expo-google-fonts/material-symbols@0.4.42':
     resolution: {integrity: sha512-KZmHZRcthJ3KFZZlpzHjopA9guZgWR9fb3uVZlTR0BNlvG2pw1bnYBCpkze2PB0vRllwGhAM7lWXsfmcWCbXYg==}
+
+  '@expo-google-fonts/poiret-one@0.4.1':
+    resolution: {integrity: sha512-77QCS2OduJGDAB3RdOk5hb/xXL8BHqZSQzO/6flLYwnR9lu/E0Y/FTYTYShX4XE5jQfnLwA+KaBbJzP3TT85DA==}
 
   '@expo/cli@57.0.10':
     resolution: {integrity: sha512-mP+B9ZrTnRE94bxPM/kCVKPyuVuOTRvvsqbXVxdXtrAfOfF94YIZLGUtw/151cGFtdUPbsBsJ9gW02LhU+QMZA==}
@@ -3414,7 +3447,17 @@ snapshots:
     dependencies:
       '@types/hammerjs': 2.0.46
 
+  '@expo-google-fonts/barlow-semi-condensed@0.4.1': {}
+
+  '@expo-google-fonts/barlow@0.4.1': {}
+
+  '@expo-google-fonts/dm-serif-display@0.4.2': {}
+
+  '@expo-google-fonts/limelight@0.4.1': {}
+
   '@expo-google-fonts/material-symbols@0.4.42': {}
+
+  '@expo-google-fonts/poiret-one@0.4.1': {}
 
   '@expo/cli@57.0.10(@expo/dom-webview@57.0.1)(@expo/metro-runtime@57.0.7)(expo-constants@57.0.7)(expo-font@57.0.1)(expo-router@57.0.8)(expo@57.0.8)(react-dom@19.2.3(react@19.2.3))(react-native@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)(supports-color@8.1.1)(typescript@6.0.3)':
     dependencies:

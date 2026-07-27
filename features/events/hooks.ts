@@ -44,6 +44,18 @@ export function useEntriesForContests(contestIds: string[]) {
   });
 }
 
+// Every entry mutation must invalidate ALL the caches that show "my entries",
+// not just this feature's own — Your Card (['profile','entries']), the Floor's
+// contest stubs (['swipe','myEntries']) and that contest's deck stay mounted
+// in their tabs and would otherwise show the pre-mutation state until an
+// unrelated refetch. Same set used by features/profile's leave mutation.
+function invalidateEntryCaches(queryClient: ReturnType<typeof useQueryClient>, contestId: string) {
+  queryClient.invalidateQueries({ queryKey: ['entries', 'byContest', contestId] });
+  queryClient.invalidateQueries({ queryKey: ['profile', 'entries'] });
+  queryClient.invalidateQueries({ queryKey: ['swipe', 'myEntries'] });
+  queryClient.invalidateQueries({ queryKey: ['swipe', 'deck', contestId] });
+}
+
 // Division chips enter/change an entry directly (no separate join screen).
 // vars.contestId is only along for cache invalidation.
 export function useJoinContest() {
@@ -55,7 +67,7 @@ export function useJoinContest() {
     // someone/something already created the row, so the true state after any
     // outcome is "check what's there now" rather than trusting local state.
     onSettled: (_data, _err, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['entries', 'byContest', vars.contestId] });
+      invalidateEntryCaches(queryClient, vars.contestId);
     },
   });
 }
@@ -66,7 +78,7 @@ export function useUpdateEntryDivision() {
     mutationFn: (vars: { entryId: string; contestId: string; division: Enums<'division'> }) =>
       api.updateEntryDivision(vars.entryId, vars.division),
     onSettled: (_data, _err, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['entries', 'byContest', vars.contestId] });
+      invalidateEntryCaches(queryClient, vars.contestId);
     },
   });
 }
@@ -76,7 +88,7 @@ export function useLeaveContest() {
   return useMutation({
     mutationFn: (vars: { entryId: string; contestId: string }) => api.leaveContest(vars.entryId),
     onSettled: (_data, _err, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['entries', 'byContest', vars.contestId] });
+      invalidateEntryCaches(queryClient, vars.contestId);
     },
   });
 }

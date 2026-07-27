@@ -167,9 +167,16 @@ export function useMyEntries(profileId: string | undefined) {
 export function useDeleteEntry(profileId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteEntry(id),
-    onSuccess: () => {
+    mutationFn: (vars: { entryId: string; contestId: string }) => deleteEntry(vars.entryId),
+    onSuccess: (_data, vars) => {
+      // Withdrawing here must also reach every other surface that shows "my
+      // entries": The Season's pool/own-entry cache, the Floor's contest stubs,
+      // and that contest's deck — they stay mounted in their tabs and would
+      // otherwise keep the stale entry. Mirrors features/events/hooks.ts.
       queryClient.invalidateQueries({ queryKey: ['profile', 'entries', profileId] });
+      queryClient.invalidateQueries({ queryKey: ['entries', 'byContest', vars.contestId] });
+      queryClient.invalidateQueries({ queryKey: ['swipe', 'myEntries'] });
+      queryClient.invalidateQueries({ queryKey: ['swipe', 'deck', vars.contestId] });
     },
   });
 }

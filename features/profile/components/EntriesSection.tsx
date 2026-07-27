@@ -17,13 +17,13 @@ export function EntriesSection({ profileId }: { profileId: string | undefined })
 
   const rows = entries ?? [];
 
-  const handleLeave = async (id: string, contestName: string, eventName: string) => {
+  const handleLeave = async (id: string, contestId: string, contestName: string, eventName: string) => {
     const confirmed = await confirmAsync(
       'Leave contest?',
       `You'll leave "${contestName}" at ${eventName}. Any match made through this entry stays, but you won't appear in this contest's deck anymore.`,
       'Leave'
     );
-    if (confirmed) deleteEntry.mutate(id);
+    if (confirmed) deleteEntry.mutate({ entryId: id, contestId });
   };
 
   return (
@@ -81,7 +81,7 @@ export function EntriesSection({ profileId }: { profileId: string | undefined })
             </View>
             <Pressable
               style={[styles.leaveButton, { borderColor: colors.red }]}
-              onPress={() => handleLeave(entry.id, entry.contestName, entry.eventName)}
+              onPress={() => handleLeave(entry.id, entry.contestId, entry.contestName, entry.eventName)}
             >
               <Text
                 style={{

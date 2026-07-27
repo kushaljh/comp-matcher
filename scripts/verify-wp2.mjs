@@ -99,14 +99,19 @@ async function main() {
     .gte('end_date', today)
     .order('start_date', { ascending: true });
 
+  // The DB is live and admins approve real user-suggested events, so assert
+  // the three SEEDS are present (with dates) rather than an exact total —
+  // an exact count breaks the moment a genuine event is approved.
+  const SEED_NAMES = ['Camp Hollywood', 'Stardust Slow Balboa Weekend', 'California Balboa Classic'];
+  const missingSeed = SEED_NAMES.find((n) => !(events ?? []).some((e) => e.name === n));
   if (evErr) {
-    fail('approved events query returns the 3 seeds', evErr.message);
-  } else if ((events?.length ?? 0) !== 3) {
-    fail('approved events query returns the 3 seeds', `expected 3 rows, got ${events?.length ?? 0}`);
+    fail('approved events query returns the seeds', evErr.message);
+  } else if (missingSeed) {
+    fail('approved events query returns the seeds', `missing "${missingSeed}" (got ${events?.length ?? 0} rows)`);
   } else if (!events.every((e) => e.start_date && e.end_date)) {
-    fail('approved events query returns the 3 seeds', 'a row is missing start_date/end_date');
+    fail('approved events query returns the seeds', 'a row is missing start_date/end_date');
   } else {
-    pass('approved events query returns the 3 seeds with dates');
+    pass(`approved events query returns the seeds with dates (${events.length} approved total)`);
   }
 
   const camp = events?.find((e) => e.name === 'Camp Hollywood');

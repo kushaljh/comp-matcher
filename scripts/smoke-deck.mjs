@@ -45,10 +45,11 @@ if (dErr) fail(`get_deck: ${dErr.message}`);
 const names = (deck ?? []).map((d) => d.display_name).sort();
 console.log('deck for follower1:', names);
 
-const hasNoviceLeader = (deck ?? []).some((d) => d.division === 'novice');
-const count = (deck ?? []).length;
-if (count !== 1 || !hasNoviceLeader)
-  fail(`expected exactly the one novice leader, got ${count} row(s)`);
+// Membership assertions, not exact counts — demo dancers share this contest.
+const hasLeo = names.includes('Leo Leader');
+const allNovice = (deck ?? []).every((d) => d.division === 'novice');
+if (!hasLeo) fail('fixture leader "Leo Leader" missing from the deck');
+if (!allNovice) fail('deck contains a non-novice candidate');
 
-console.log('SMOKE PASSED: deck contains exactly the novice leader.');
+console.log(`SMOKE PASSED: fixture leader present, all ${names.length} candidates novice.`);
 await supabase.auth.signOut();

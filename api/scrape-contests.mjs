@@ -303,7 +303,9 @@ function jsonResponse(status, body) {
   });
 }
 
-export default async function handler(request) {
+// Web-standard core — used directly by scripts/verify-scraper.mjs, and by the
+// Vercel adapter below.
+export async function handleRequest(request) {
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders() });
   }
@@ -327,4 +329,18 @@ export default async function handler(request) {
     }
     return jsonResponse(500, { ok: false, error: 'Unexpected error scraping that page.' });
   }
+}
+
+// Vercel's Node.js runtime invokes the default export with the classic
+// (req, res) signature — req.url is a RELATIVE path, so the web-standard
+// handler above cannot be the default export directly (new URL(req.url)
+// throws, which surfaced as FUNCTION_INVOCATION_FAILED in production).
+export default async function vercelHandler(req, res) {
+  const proto = req.headers['x-forwarded-proto'] ?? 'https';
+  const host = req.headers.host ?? 'localhost';
+  const request = new Request(`${proto}://${host}${req.url}`, { method: req.method });
+  const response = await handleRequest(request);
+  res.statusCode = response.status;
+  for (const [key, value] of response.headers.entries()) res.setHeader(key, value);
+  res.end(await response.text());
 }

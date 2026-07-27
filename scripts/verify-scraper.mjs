@@ -5,7 +5,7 @@
 // sites, and clean handling of an unreachable domain.
 // Usage: node scripts/verify-scraper.mjs
 // ============================================================================
-import handler from '../api/scrape-contests.mjs';
+import { handleRequest as handler } from '../api/scrape-contests.mjs';
 
 const results = [];
 function check(label, pass, detail = '') {

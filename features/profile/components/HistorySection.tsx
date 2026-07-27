@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextField } from '../../../theme/components';
-import { colors, fontSizes, fontWeights, radii, spacing } from '../../../theme/tokens';
+import { useTheme } from '../../../theme/ThemeProvider';
 import type { HistoryRow } from '../api';
 import { useAddHistory, useDeleteHistory, useHistory, useUpdateHistory } from '../hooks';
 
@@ -39,10 +39,11 @@ function HistoryForm({
   onCancel: () => void;
   submitLabel: string;
 }) {
+  const { colors, fonts, fs, radii } = useTheme();
   const [form, setForm] = useState(initial);
 
   return (
-    <View style={styles.form}>
+    <View style={[styles.form, { backgroundColor: colors.fieldBg, borderRadius: radii.rSm }]}>
       <TextField
         label="Event name"
         value={form.eventName}
@@ -67,14 +68,22 @@ function HistoryForm({
       />
       <View style={styles.formActions}>
         <Pressable
-          style={[styles.smallButton, !isValid(form) && styles.smallButtonDisabled]}
+          style={[
+            styles.smallButton,
+            { borderColor: colors.brass, borderRadius: radii.pill },
+            !isValid(form) && styles.smallButtonDisabled,
+          ]}
           disabled={!isValid(form)}
           onPress={() => onSubmit(form)}
         >
-          <Text style={styles.smallButtonText}>{submitLabel}</Text>
+          <Text style={{ fontFamily: fonts.condensedSemi, fontSize: fs(11.5), letterSpacing: 1, textTransform: 'uppercase', color: colors.brass }}>
+            {submitLabel}
+          </Text>
         </Pressable>
-        <Pressable style={styles.smallButton} onPress={onCancel}>
-          <Text style={styles.smallButtonText}>Cancel</Text>
+        <Pressable style={[styles.smallButton, { borderColor: colors.brass, borderRadius: radii.pill }]} onPress={onCancel}>
+          <Text style={{ fontFamily: fonts.condensedSemi, fontSize: fs(11.5), letterSpacing: 1, textTransform: 'uppercase', color: colors.brass }}>
+            Cancel
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -91,6 +100,7 @@ function rowToForm(row: HistoryRow): FormState {
 }
 
 export function HistorySection({ profileId }: { profileId: string | undefined }) {
+  const { colors, fonts, fs } = useTheme();
   const { data: history, isLoading } = useHistory(profileId);
   const addHistory = useAddHistory(profileId);
   const updateHistory = useUpdateHistory(profileId);
@@ -104,10 +114,22 @@ export function HistorySection({ profileId }: { profileId: string | undefined })
   return (
     <View>
       <View style={styles.headerRow}>
-        <Text style={styles.sectionTitle}>Competition history</Text>
+        <Text
+          style={{
+            fontFamily: fonts.mono,
+            fontSize: fs(9),
+            letterSpacing: 1.6,
+            textTransform: 'uppercase',
+            color: colors.ink2,
+          }}
+        >
+          Competition history
+        </Text>
         {!adding && (
           <Pressable onPress={() => setAdding(true)}>
-            <Text style={styles.addLink}>+ Add</Text>
+            <Text style={{ fontFamily: fonts.condensedSemi, fontSize: fs(12), letterSpacing: 1, textTransform: 'uppercase', color: colors.brass }}>
+              + Add
+            </Text>
           </Pressable>
         )}
       </View>
@@ -129,18 +151,29 @@ export function HistorySection({ profileId }: { profileId: string | undefined })
             }
           />
         ) : (
-          <View key={row.id} style={styles.row}>
-            <Text style={styles.rowTitle}>
-              {row.contest_name} @ {row.event_name} ({row.year})
+          <View key={row.id} style={[styles.row, { borderTopColor: colors.line }]}>
+            <Text style={{ fontFamily: fonts.deco, fontSize: fs(18), color: colors.brass, width: 46 }}>
+              {row.year}
             </Text>
-            <Text style={styles.rowSubtitle}>{row.placement ?? 'No placement recorded'}</Text>
-            <View style={styles.formActions}>
-              <Pressable style={styles.smallButton} onPress={() => setEditingId(row.id)}>
-                <Text style={styles.smallButtonText}>Edit</Text>
-              </Pressable>
-              <Pressable style={styles.smallButton} onPress={() => deleteHistory.mutate(row.id)}>
-                <Text style={styles.smallButtonText}>Delete</Text>
-              </Pressable>
+            <View style={styles.rowText}>
+              <Text style={{ fontFamily: fonts.bodyMedium, fontSize: fs(14), color: colors.ink }}>
+                {row.contest_name} @ {row.event_name}
+              </Text>
+              <Text style={{ fontFamily: fonts.body, fontSize: fs(13), color: colors.ink2, marginTop: 2 }}>
+                {row.placement ?? 'No placement recorded'}
+              </Text>
+              <View style={styles.formActions}>
+                <Pressable onPress={() => setEditingId(row.id)}>
+                  <Text style={{ fontFamily: fonts.condensedSemi, fontSize: fs(11), letterSpacing: 1, textTransform: 'uppercase', color: colors.brass }}>
+                    Edit
+                  </Text>
+                </Pressable>
+                <Pressable onPress={() => deleteHistory.mutate(row.id)}>
+                  <Text style={{ fontFamily: fonts.condensedSemi, fontSize: fs(11), letterSpacing: 1, textTransform: 'uppercase', color: colors.red }}>
+                    Delete
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           </View>
         )
@@ -158,7 +191,9 @@ export function HistorySection({ profileId }: { profileId: string | undefined })
       )}
 
       {!isLoading && rows.length === 0 && !adding && (
-        <Text style={styles.hint}>No competition history yet.</Text>
+        <Text style={{ fontFamily: fonts.body, fontSize: fs(13), color: colors.ink2 }}>
+          No competition history yet.
+        </Text>
       )}
     </View>
   );
@@ -169,62 +204,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  sectionTitle: {
-    fontSize: fontSizes.lg,
-    fontWeight: fontWeights.semibold,
-    color: colors.textPrimary,
-  },
-  addLink: {
-    color: colors.brassDark,
-    fontWeight: fontWeights.semibold,
-    fontSize: fontSizes.sm,
-  },
-  hint: {
-    fontSize: fontSizes.sm,
-    color: colors.textSecondary,
+    marginBottom: 9,
   },
   row: {
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 14,
+    paddingVertical: 11,
+    borderTopWidth: 1,
   },
-  rowTitle: {
-    fontSize: fontSizes.md,
-    fontWeight: fontWeights.medium,
-    color: colors.textPrimary,
-  },
-  rowSubtitle: {
-    fontSize: fontSizes.sm,
-    color: colors.textSecondary,
-    marginTop: 2,
-    marginBottom: spacing.xs,
+  rowText: {
+    flex: 1,
+    minWidth: 0,
   },
   form: {
-    backgroundColor: colors.creamDark,
-    borderRadius: radii.md,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
+    padding: 14,
+    marginBottom: 10,
+    gap: 4,
   },
   formActions: {
     flexDirection: 'row',
-    gap: spacing.xs,
+    gap: 14,
+    marginTop: 6,
   },
   smallButton: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.sm,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: colors.brass,
   },
   smallButtonDisabled: {
-    borderColor: colors.disabled,
     opacity: 0.5,
-  },
-  smallButtonText: {
-    color: colors.brassDark,
-    fontSize: fontSizes.xs,
-    fontWeight: fontWeights.semibold,
   },
 });

@@ -1,20 +1,9 @@
 import { Stack } from 'expo-router';
-import { colors, fontWeights } from '../../../theme/tokens';
 
-// A nested Stack so tapping a match pushes a detail screen while the tab bar
-// (defined in app/(tabs)/_layout.tsx) stays put.
+// No native headers anywhere in this app (see app/(tabs)/_layout.tsx) — each
+// screen below builds its own in-content back link to match (the Partner
+// Dossier's "BACK TO THE CARD" pill). Previously this Stack drew a native
+// header with theme/tokens' dark-only colors, which read wrong in light mode.
 export default function MatchesLayout() {
-  return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.cream },
-        headerTintColor: colors.textPrimary,
-        headerTitleStyle: { fontWeight: fontWeights.semibold },
-        headerShadowVisible: false,
-      }}
-    >
-      <Stack.Screen name="index" options={{ title: 'Matches' }} />
-      <Stack.Screen name="[id]" options={{ title: 'Match' }} />
-    </Stack>
-  );
+  return <Stack screenOptions={{ headerShown: false }} />;
 }

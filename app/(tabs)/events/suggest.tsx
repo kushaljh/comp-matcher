@@ -1,8 +1,8 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
-import { Button, Card, Screen, TextField } from '../../../theme/components';
-import { colors, fontSizes, fontWeights, spacing } from '../../../theme/tokens';
+import { Button, Screen, TextField } from '../../../theme/components';
+import { useTheme } from '../../../theme/ThemeProvider';
 import { useSuggestEvent } from '../../../features/events/hooks';
 import { DateRangePicker } from '../../../features/events/DateRangePicker';
 import { formatDateRange, isPlausibleUrl } from '../../../features/events/format';
@@ -13,6 +13,7 @@ type FormErrors = Partial<
 
 export default function SuggestEventScreen() {
   const router = useRouter();
+  const { colors, fonts, fs } = useTheme();
   const suggestMutation = useSuggestEvent();
 
   const [name, setName] = useState('');
@@ -59,10 +60,10 @@ export default function SuggestEventScreen() {
   if (submitted) {
     return (
       <Screen style={styles.confirmScreen}>
-        <Card>
-          <Text style={styles.confirmText}>Submitted — it'll appear once approved.</Text>
-          <Button title="Back to events" onPress={() => router.replace('/events')} />
-        </Card>
+        <Text style={{ fontFamily: fonts.body, fontSize: fs(16), color: colors.ink, marginBottom: 16 }}>
+          Submitted — it&apos;ll appear once approved.
+        </Text>
+        <Button title="Back to events" onPress={() => router.replace('/events')} />
       </Screen>
     );
   }
@@ -71,9 +72,23 @@ export default function SuggestEventScreen() {
     <Screen>
       <ScrollView contentContainerStyle={styles.content}>
         <Pressable onPress={() => router.back()}>
-          <Text style={styles.back}>← Back</Text>
+          <Text
+            style={{
+              fontFamily: fonts.condensedSemi,
+              fontSize: fs(13),
+              letterSpacing: 1,
+              color: colors.brass,
+              marginBottom: 8,
+            }}
+          >
+            ← Back
+          </Text>
         </Pressable>
-        <Text style={styles.title}>Suggest an event</Text>
+        <Text
+          style={{ fontFamily: fonts.display, fontSize: fs(22), letterSpacing: 1, color: colors.ink, marginBottom: 16 }}
+        >
+          Suggest an event
+        </Text>
 
         <TextField label="Name" value={name} onChangeText={setName} error={errors.name} />
         <TextField label="Location" value={location} onChangeText={setLocation} error={errors.location} />
@@ -88,7 +103,18 @@ export default function SuggestEventScreen() {
           error={errors.dates}
         />
         {startDate && endDate ? (
-          <Text style={styles.datesSummary}>{formatDateRange(startDate, endDate)}</Text>
+          <Text
+            style={{
+              fontFamily: fonts.condensedSemi,
+              fontSize: fs(13),
+              color: colors.brass,
+              marginTop: -8,
+              marginBottom: 16,
+              textAlign: 'center',
+            }}
+          >
+            {formatDateRange(startDate, endDate)}
+          </Text>
         ) : null}
         <TextField
           label="Website (optional)"
@@ -109,7 +135,11 @@ export default function SuggestEventScreen() {
           keyboardType="url"
         />
 
-        {errors.submit ? <Text style={styles.errorText}>{errors.submit}</Text> : null}
+        {errors.submit ? (
+          <Text style={{ color: colors.red, fontFamily: fonts.body, fontSize: fs(14), marginBottom: 16 }}>
+            {errors.submit}
+          </Text>
+        ) : null}
 
         <Button title="Submit" onPress={handleSubmit} loading={suggestMutation.isPending} />
       </ScrollView>
@@ -119,40 +149,9 @@ export default function SuggestEventScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: spacing.xl,
-  },
-  back: {
-    fontSize: fontSizes.md,
-    color: colors.brassDark,
-    fontWeight: fontWeights.medium,
-    marginBottom: spacing.sm,
-  },
-  title: {
-    fontSize: fontSizes.xl,
-    fontWeight: fontWeights.bold,
-    color: colors.textPrimary,
-    marginBottom: spacing.md,
-  },
-  errorText: {
-    color: colors.red,
-    fontSize: fontSizes.sm,
-    marginBottom: spacing.md,
-  },
-  datesSummary: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    color: colors.brassDark,
-    marginTop: -spacing.xs,
-    marginBottom: spacing.md,
-    textAlign: 'center',
+    paddingBottom: 32,
   },
   confirmScreen: {
     justifyContent: 'center',
-  },
-  confirmText: {
-    fontSize: fontSizes.md,
-    fontWeight: fontWeights.medium,
-    color: colors.textPrimary,
-    marginBottom: spacing.md,
   },
 });

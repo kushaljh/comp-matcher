@@ -16,20 +16,42 @@ import { CONTACT_PLATFORMS, DANCE_ROLES, PLATFORM_LABELS, VALUES } from '../../.
 import { useSession } from '../../../features/auth/SessionProvider';
 import { hasProfileQueryKey } from '../../../features/auth/useHasProfile';
 import { Button, Card, Screen, TextField } from '../../../theme/components';
-import { colors, fontSizes, fontWeights, radii, spacing } from '../../../theme/tokens';
+import { useTheme } from '../../../theme/ThemeProvider';
+import { radii, spacing } from '../../../theme/tokens';
 
 type ContactDraft = { platform: ContactPlatform; handle: string };
 type HistoryDraft = { event_name: string; year: string; contest_name: string; placement: string };
 
 function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  const { colors, fonts, fs } = useTheme();
   return (
-    <Pressable onPress={onPress} style={[styles.chip, selected && styles.chipSelected]}>
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.chip,
+        {
+          borderRadius: radii.pill,
+          borderColor: selected ? colors.brass : colors.line,
+          backgroundColor: selected ? colors.brass : 'transparent',
+        },
+      ]}
+    >
+      <Text
+        style={{
+          fontFamily: selected ? fonts.condensedSemi : fonts.condensed,
+          fontSize: fs(13),
+          textTransform: 'capitalize',
+          color: selected ? colors.bg : colors.ink,
+        }}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
 
 export default function OnboardingScreen() {
+  const { colors, fonts, fs } = useTheme();
   const { session } = useSession();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -168,40 +190,46 @@ export default function OnboardingScreen() {
     }
   }
 
+  const sectionLabel = { fontFamily: fonts.condensedSemi, fontSize: fs(13), color: colors.ink };
+  const caption = { fontFamily: fonts.body, fontSize: fs(12), color: colors.ink2 };
+  const errorText = { fontFamily: fonts.body, fontSize: fs(13), color: colors.red };
+
   return (
     <Screen>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Set up your profile</Text>
+        <Text style={{ fontFamily: fonts.display, fontSize: fs(26), letterSpacing: 1, color: colors.ink }}>
+          Set up your profile
+        </Text>
 
         <Card style={styles.card}>
-          <Text style={styles.sectionLabel}>Photo</Text>
+          <Text style={sectionLabel}>Photo</Text>
           <View style={styles.photoRow}>
             {photoUri ? (
               <Image source={{ uri: photoUri }} style={styles.photoPreview} />
             ) : (
-              <View style={[styles.photoPreview, styles.photoPlaceholder]}>
-                <Text style={styles.photoPlaceholderText}>No photo</Text>
+              <View style={[styles.photoPreview, styles.photoPlaceholder, { backgroundColor: colors.surface2, borderColor: colors.line }]}>
+                <Text style={{ fontFamily: fonts.body, fontSize: fs(12), color: colors.ink2 }}>No photo</Text>
               </View>
             )}
             <Button title={photoUri ? 'Change photo' : 'Choose photo'} variant="secondary" onPress={handlePickPhoto} />
           </View>
-          {photoError ? <Text style={styles.error}>{photoError}</Text> : null}
+          {photoError ? <Text style={errorText}>{photoError}</Text> : null}
         </Card>
 
         <Card style={styles.card}>
           <TextField label="Display name" value={displayName} onChangeText={setDisplayName} />
 
-          <Text style={styles.sectionLabel}>Role</Text>
+          <Text style={sectionLabel}>Role</Text>
           <View style={styles.chipRow}>
             {DANCE_ROLES.map((r) => (
               <Chip key={r} label={r} selected={role === r} onPress={() => setRole(r)} />
             ))}
           </View>
-          <Text style={styles.caption}>
+          <Text style={caption}>
             Your role is fixed once set — you can&apos;t switch between leader and follower later.
           </Text>
 
-          <Text style={styles.sectionLabel}>Values</Text>
+          <Text style={sectionLabel}>Values</Text>
           <View style={styles.chipRow}>
             {VALUES.map((v) => (
               <Chip key={v} label={v} selected={selectedValues.includes(v)} onPress={() => toggleValue(v)} />
@@ -219,7 +247,7 @@ export default function OnboardingScreen() {
         </Card>
 
         <Card style={styles.card}>
-          <Text style={styles.sectionLabel}>Contacts (at least one required)</Text>
+          <Text style={sectionLabel}>Contacts (at least one required)</Text>
           {contacts.map((contact, index) => (
             <View key={index} style={styles.row}>
               <View style={styles.chipRow}>
@@ -242,19 +270,21 @@ export default function OnboardingScreen() {
                 />
                 {contacts.length > 1 ? (
                   <Pressable onPress={() => removeContact(index)}>
-                    <Text style={styles.removeText}>Remove</Text>
+                    <Text style={{ fontFamily: fonts.body, fontSize: fs(13), color: colors.red }}>Remove</Text>
                   </Pressable>
                 ) : null}
               </View>
             </View>
           ))}
           <Pressable onPress={addContact}>
-            <Text style={styles.addText}>+ Add another contact</Text>
+            <Text style={{ fontFamily: fonts.condensedSemi, fontSize: fs(13), color: colors.brass }}>
+              + Add another contact
+            </Text>
           </Pressable>
         </Card>
 
         <Card style={styles.card}>
-          <Text style={styles.sectionLabel}>Competition history (optional)</Text>
+          <Text style={sectionLabel}>Competition history (optional)</Text>
           {history.map((row, index) => (
             <View key={index} style={styles.row}>
               <TextField
@@ -279,20 +309,22 @@ export default function OnboardingScreen() {
                 onChangeText={(v) => updateHistory(index, { placement: v })}
               />
               <Pressable onPress={() => removeHistory(index)}>
-                <Text style={styles.removeText}>Remove this entry</Text>
+                <Text style={{ fontFamily: fonts.body, fontSize: fs(13), color: colors.red }}>
+                  Remove this entry
+                </Text>
               </Pressable>
             </View>
           ))}
           <Pressable onPress={addHistory}>
-            <Text style={styles.addText}>+ Add a competition</Text>
+            <Text style={{ fontFamily: fonts.condensedSemi, fontSize: fs(13), color: colors.brass }}>
+              + Add a competition
+            </Text>
           </Pressable>
         </Card>
 
-        {submitError ? <Text style={styles.error}>{submitError}</Text> : null}
+        {submitError ? <Text style={errorText}>{submitError}</Text> : null}
         <Button title="Finish" onPress={handleSubmit} loading={submitting} disabled={!canSubmit} />
-        {missing.length > 0 ? (
-          <Text style={styles.caption}>Still need: {missing.join(', ')}.</Text>
-        ) : null}
+        {missing.length > 0 ? <Text style={caption}>Still need: {missing.join(', ')}.</Text> : null}
       </ScrollView>
     </Screen>
   );
@@ -300,48 +332,22 @@ export default function OnboardingScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingVertical: spacing.xl, gap: spacing.md },
-  title: {
-    fontSize: fontSizes.xxl,
-    fontWeight: fontWeights.bold,
-    color: colors.textPrimary,
-  },
   card: { gap: spacing.sm },
-  sectionLabel: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    color: colors.textPrimary,
-  },
-  caption: {
-    fontSize: fontSizes.xs,
-    color: colors.textSecondary,
-  },
-  error: { color: colors.red, fontSize: fontSizes.sm },
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   photoPreview: { width: 72, height: 72, borderRadius: radii.pill },
   photoPlaceholder: {
-    backgroundColor: colors.creamDark,
     borderWidth: 1,
-    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  photoPlaceholderText: { fontSize: fontSizes.xs, color: colors.textSecondary },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   chip: {
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
-    borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.white,
   },
-  chipSelected: { backgroundColor: colors.brass, borderColor: colors.brass },
-  chipText: { fontSize: fontSizes.sm, color: colors.textPrimary },
-  chipTextSelected: { color: colors.navy, fontWeight: fontWeights.semibold },
   bioInput: { minHeight: 72, textAlignVertical: 'top' },
   row: { gap: spacing.xs, marginBottom: spacing.sm },
   rowFields: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   flexInput: { flex: 1 },
-  addText: { color: colors.brass, fontWeight: fontWeights.semibold, fontSize: fontSizes.sm },
-  removeText: { color: colors.red, fontSize: fontSizes.sm },
 });

@@ -3,9 +3,10 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 import { signUpWithEmail } from '../../features/auth/api';
 import { Button, Screen, TextField } from '../../theme/components';
-import { colors, fontSizes, fontWeights, spacing } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 export default function SignUpScreen() {
+  const { colors, fonts, fs } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -35,12 +36,14 @@ export default function SignUpScreen() {
   if (confirmationSent) {
     return (
       <Screen style={styles.centered}>
-        <Text style={styles.title}>Check your email</Text>
-        <Text style={styles.body}>
+        <Text style={{ fontFamily: fonts.display, fontSize: fs(24), letterSpacing: 1, color: colors.ink, marginBottom: 16, textAlign: 'center' }}>
+          Check your email
+        </Text>
+        <Text style={{ fontFamily: fonts.body, fontSize: fs(15), color: colors.ink2, textAlign: 'center' }}>
           We sent a confirmation link to {email.trim()}. Confirm your address, then come back and
           sign in.
         </Text>
-        <Link href="/(auth)/sign-in" style={styles.link}>
+        <Link href="/(auth)/sign-in" style={[styles.link, { color: colors.brass, fontFamily: fonts.body, fontSize: fs(14) }]}>
           Back to sign in
         </Link>
       </Screen>
@@ -50,7 +53,18 @@ export default function SignUpScreen() {
   return (
     <Screen>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Create an account</Text>
+        <Text
+          style={{
+            fontFamily: fonts.display,
+            fontSize: fs(28),
+            letterSpacing: 1,
+            color: colors.ink,
+            marginBottom: 24,
+            textAlign: 'center',
+          }}
+        >
+          Create an account
+        </Text>
         <TextField
           label="Email"
           value={email}
@@ -66,14 +80,18 @@ export default function SignUpScreen() {
           secureTextEntry
           autoCapitalize="none"
         />
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? (
+          <Text style={{ color: colors.red, fontFamily: fonts.body, fontSize: fs(13), marginBottom: 8 }}>
+            {error}
+          </Text>
+        ) : null}
         <Button
           title="Sign up"
           onPress={handleSignUp}
           loading={loading}
           disabled={!email.trim() || !password}
         />
-        <Link href="/(auth)/sign-in" style={styles.link}>
+        <Link href="/(auth)/sign-in" style={[styles.link, { color: colors.brass, fontFamily: fonts.body, fontSize: fs(14) }]}>
           Already have an account? Sign in
         </Link>
       </ScrollView>
@@ -82,21 +100,10 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingVertical: spacing.xl, gap: spacing.sm },
-  centered: { alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  title: {
-    fontSize: fontSizes.xxl,
-    fontWeight: fontWeights.bold,
-    color: colors.textPrimary,
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-  },
-  body: { fontSize: fontSizes.md, color: colors.textSecondary, textAlign: 'center' },
-  error: { color: colors.red, marginBottom: spacing.sm },
+  content: { paddingVertical: 32, gap: 8 },
+  centered: { alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
   link: {
-    color: colors.brass,
-    fontSize: fontSizes.sm,
     textAlign: 'center',
-    marginTop: spacing.md,
+    marginTop: 16,
   },
 });

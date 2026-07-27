@@ -10,6 +10,9 @@ export type MatchListItem = {
   contestName: string;
   eventId: string;
   eventName: string;
+  createdAt: string;
+  division: Enums<'division'> | null;
+  firstHandle: string | null;
   otherProfile: {
     id: string;
     displayName: string;
@@ -22,6 +25,7 @@ export type MatchDetail = {
   contestId: string;
   contestName: string;
   eventName: string;
+  createdAt: string;
   otherProfile: {
     id: string;
     displayName: string;
@@ -65,6 +69,7 @@ type RawMatchListRow = {
   contest_id: string;
   profile_a: string;
   profile_b: string;
+  created_at: string;
   contest: { id: string; name: string; event: { id: string; name: string } | null } | null;
   profile_a_data: RawProfileLite | null;
   profile_b_data: RawProfileLite | null;
@@ -81,6 +86,7 @@ type RawMatchDetailRow = {
   contest_id: string;
   profile_a: string;
   profile_b: string;
+  created_at: string;
   contest: { name: string; event: { name: string } | null } | null;
   profile_a_data: RawProfileFull | null;
   profile_b_data: RawProfileFull | null;
@@ -101,6 +107,7 @@ export async function fetchMatches(myProfileId: string): Promise<MatchListItem[]
       contest_id,
       profile_a,
       profile_b,
+      created_at,
       contest:contests(id, name, event:events(id, name)),
       profile_a_data:profiles!matches_profile_a_fkey(id, display_name, photo_url),
       profile_b_data:profiles!matches_profile_b_fkey(id, display_name, photo_url)
@@ -112,17 +119,56 @@ export async function fetchMatches(myProfileId: string): Promise<MatchListItem[]
   if (error) throw error;
 
   const rows = (data ?? []) as unknown as RawMatchListRow[];
+
+  // The division shown per row is the SHARED entry division (get_deck() only
+  // ever matches same-contest, same-division candidates — see
+  // supabase/migrations/20260727120300_functions.sql). One bulk query for all
+  // (contest_id, profile_id) pairs in the list beats N sequential lookups.
+  const otherIds = rows.map((row) => (row.profile_a === myProfileId ? row.profile_b : row.profile_a));
+  const contestIds = rows.map((row) => row.contest_id);
+  const divisionByKey = new Map<string, Enums<'division'>>();
+  if (rows.length > 0) {
+    const { data: entryRows, error: entryErr } = await supabase
+      .from('entries')
+      .select('contest_id, profile_id, division')
+      .in('contest_id', contestIds)
+      .in('profile_id', otherIds);
+    if (entryErr) throw entryErr;
+    for (const e of entryRows ?? []) {
+      divisionByKey.set(`${e.contest_id}::${e.profile_id}`, e.division);
+    }
+  }
+
+  // First contact handle per matched profile — readable because the RLS
+  // policy on profile_contacts opens up once matched (see 20260727120100_rls.sql).
+  const firstHandleByProfile = new Map<string, string>();
+  if (otherIds.length > 0) {
+    const { data: contactRows, error: contactErr } = await supabase
+      .from('profile_contacts')
+      .select('profile_id, handle')
+      .in('profile_id', otherIds)
+      .order('platform');
+    if (contactErr) throw contactErr;
+    for (const c of contactRows ?? []) {
+      if (!firstHandleByProfile.has(c.profile_id)) firstHandleByProfile.set(c.profile_id, c.handle);
+    }
+  }
+
   return rows.map((row) => {
     const isA = row.profile_a === myProfileId;
     const other = isA ? row.profile_b_data : row.profile_a_data;
+    const otherId = other?.id ?? '';
     return {
       id: row.id,
       contestId: row.contest_id,
       contestName: row.contest?.name ?? 'Unknown contest',
       eventId: row.contest?.event?.id ?? '',
       eventName: row.contest?.event?.name ?? 'Unknown event',
+      createdAt: row.created_at,
+      division: divisionByKey.get(`${row.contest_id}::${otherId}`) ?? null,
+      firstHandle: firstHandleByProfile.get(otherId) ?? null,
       otherProfile: {
-        id: other?.id ?? '',
+        id: otherId,
         displayName: other?.display_name ?? 'Dancer',
         photoUrl: other?.photo_url ?? null,
       },
@@ -142,6 +188,7 @@ export async function fetchMatchDetail(
       contest_id,
       profile_a,
       profile_b,
+      created_at,
       contest:contests(name, event:events(name)),
       profile_a_data:profiles!matches_profile_a_fkey(id, display_name, photo_url, role, bio, values),
       profile_b_data:profiles!matches_profile_b_fkey(id, display_name, photo_url, role, bio, values)
@@ -163,6 +210,7 @@ export async function fetchMatchDetail(
     contestId: row.contest_id,
     contestName: row.contest?.name ?? 'Unknown contest',
     eventName: row.contest?.event?.name ?? 'Unknown event',
+    createdAt: row.created_at,
     otherProfile: {
       id: other.id,
       displayName: other.display_name,

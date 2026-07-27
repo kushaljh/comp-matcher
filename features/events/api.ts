@@ -26,12 +26,6 @@ export async function fetchApprovedEvents(): Promise<EventRow[]> {
   return data ?? [];
 }
 
-export async function fetchEvent(id: string): Promise<EventRow | null> {
-  const { data, error } = await supabase.from('events').select('*').eq('id', id).maybeSingle();
-  if (error) throw error;
-  return data;
-}
-
 export type NewEventInput = {
   name: string;
   location: string;
@@ -115,12 +109,30 @@ export async function joinContest(params: {
   if (error) throw error;
 }
 
-export async function updateEntryNote(entryId: string, note: string | null): Promise<void> {
-  const { error } = await supabase.from('entries').update({ note }).eq('id', entryId);
+export async function updateEntryDivision(entryId: string, division: Enums<'division'>): Promise<void> {
+  const { error } = await supabase.from('entries').update({ division }).eq('id', entryId);
   if (error) throw error;
 }
 
 export async function leaveContest(entryId: string): Promise<void> {
   const { error } = await supabase.from('entries').delete().eq('id', entryId);
   if (error) throw error;
+}
+
+// Every entry in one contest (id, division, whose profile) — readable by any
+// authenticated user (RLS: entries_select is `using (true)`). The Season uses
+// this both to find the caller's own entry and to count division pool sizes.
+export type EntryForCounts = {
+  id: string;
+  division: Enums<'division'>;
+  profile_id: string;
+};
+
+export async function fetchEntriesForContest(contestId: string): Promise<EntryForCounts[]> {
+  const { data, error } = await supabase
+    .from('entries')
+    .select('id, division, profile_id')
+    .eq('contest_id', contestId);
+  if (error) throw error;
+  return data ?? [];
 }

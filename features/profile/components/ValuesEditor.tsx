@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextField } from '../../../theme/components';
-import { colors, fontSizes, fontWeights, radii, spacing } from '../../../theme/tokens';
+import { useTheme } from '../../../theme/ThemeProvider';
 
 type ValuesEditorProps = {
   values: string[];
@@ -9,6 +9,7 @@ type ValuesEditorProps = {
 };
 
 export function ValuesEditor({ values, onChange }: ValuesEditorProps) {
+  const { colors, fonts, fs, radii } = useTheme();
   const [draft, setDraft] = useState('');
 
   const addValue = () => {
@@ -28,15 +29,47 @@ export function ValuesEditor({ values, onChange }: ValuesEditorProps) {
 
   return (
     <View>
-      <Text style={styles.label}>Values</Text>
+      <Text
+        style={{
+          fontFamily: fonts.mono,
+          fontSize: fs(9),
+          letterSpacing: 1.6,
+          textTransform: 'uppercase',
+          color: colors.ink2,
+          marginBottom: 9,
+        }}
+      >
+        What you&apos;re after
+      </Text>
       <View style={styles.chipRow}>
         {values.map((value) => (
-          <Pressable key={value} style={styles.chip} onPress={() => removeValue(value)}>
-            <Text style={styles.chipText}>{value}</Text>
-            <Text style={styles.chipRemove}>×</Text>
+          <Pressable
+            key={value}
+            style={[
+              styles.chip,
+              { backgroundColor: colors.likeBg, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.line },
+            ]}
+            onPress={() => removeValue(value)}
+          >
+            <Text
+              style={{
+                fontFamily: fonts.condensedSemi,
+                fontSize: fs(12.5),
+                letterSpacing: 0.8,
+                textTransform: 'uppercase',
+                color: colors.ink,
+              }}
+            >
+              {value}
+            </Text>
+            <Text style={{ fontFamily: fonts.body, fontSize: fs(15), color: colors.ink2, marginLeft: 6 }}>×</Text>
           </Pressable>
         ))}
-        {values.length === 0 && <Text style={styles.emptyText}>No values added yet.</Text>}
+        {values.length === 0 && (
+          <Text style={{ fontFamily: fonts.body, fontSize: fs(13), color: colors.ink2 }}>
+            No values added yet.
+          </Text>
+        )}
       </View>
       <View style={styles.addRow}>
         <TextField
@@ -47,8 +80,18 @@ export function ValuesEditor({ values, onChange }: ValuesEditorProps) {
           onSubmitEditing={addValue}
           returnKeyType="done"
         />
-        <Pressable style={styles.addButton} onPress={addValue}>
-          <Text style={styles.addButtonText}>Add</Text>
+        <Pressable style={[styles.addButton, { backgroundColor: colors.brass, borderRadius: radii.rSm }]} onPress={addValue}>
+          <Text
+            style={{
+              fontFamily: fonts.condensedSemi,
+              fontSize: fs(12.5),
+              letterSpacing: 1,
+              textTransform: 'uppercase',
+              color: colors.bg,
+            }}
+          >
+            Add
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -56,59 +99,30 @@ export function ValuesEditor({ values, onChange }: ValuesEditorProps) {
 }
 
 const styles = StyleSheet.create({
-  label: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
-  },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginBottom: spacing.sm,
+    gap: 6,
+    marginBottom: 10,
+    alignItems: 'center',
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.creamDark,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.pill,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-  },
-  chipText: {
-    color: colors.textPrimary,
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-  },
-  chipRemove: {
-    color: colors.textSecondary,
-    fontSize: fontSizes.md,
-    marginLeft: spacing.xs,
-    fontWeight: fontWeights.bold,
-  },
-  emptyText: {
-    color: colors.textSecondary,
-    fontSize: fontSizes.sm,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
   },
   addRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing.sm,
+    gap: 10,
   },
   input: {
     flex: 1,
   },
   addButton: {
-    backgroundColor: colors.brass,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  addButtonText: {
-    color: colors.navy,
-    fontWeight: fontWeights.semibold,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    marginTop: 0,
   },
 });

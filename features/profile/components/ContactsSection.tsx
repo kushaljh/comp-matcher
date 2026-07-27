@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextField } from '../../../theme/components';
-import { colors, fontSizes, fontWeights, radii, spacing } from '../../../theme/tokens';
+import { useTheme } from '../../../theme/ThemeProvider';
 import type { Enums } from '../../../lib/database.types';
 import {
   useAddContact,
@@ -33,6 +33,7 @@ const PLATFORM_LABELS: Record<Enums<'contact_platform'>, string> = {
 };
 
 export function ContactsSection({ profileId }: { profileId: string | undefined }) {
+  const { colors, fonts, fs, radii } = useTheme();
   const { data: contacts, isLoading } = useContacts(profileId);
   const addContact = useAddContact(profileId);
   const updateContact = useUpdateContact(profileId);
@@ -74,46 +75,65 @@ export function ContactsSection({ profileId }: { profileId: string | undefined }
     );
   };
 
+  const smallButtonText = { fontFamily: fonts.condensedSemi, fontSize: fs(11), letterSpacing: 1, textTransform: 'uppercase' as const, color: colors.brass };
+
   return (
     <View>
-      <Text style={styles.sectionTitle}>Contacts</Text>
-      <Text style={styles.hint}>You need at least one way for a match to reach you.</Text>
+      <Text
+        style={{
+          fontFamily: fonts.mono,
+          fontSize: fs(9),
+          letterSpacing: 1.6,
+          textTransform: 'uppercase',
+          color: colors.ink2,
+        }}
+      >
+        Contacts
+      </Text>
+      <Text style={{ fontFamily: fonts.body, fontSize: fs(12.5), color: colors.ink2, marginTop: 4, marginBottom: 9 }}>
+        You need at least one way for a match to reach you.
+      </Text>
 
       {isLoading && <ActivityIndicator color={colors.brass} />}
 
       {contactList.map((contact) => (
-        <View key={contact.id} style={styles.row}>
-          <Text style={styles.platformLabel}>{PLATFORM_LABELS[contact.platform]}</Text>
+        <View key={contact.id} style={[styles.row, { backgroundColor: colors.fieldBg, borderRadius: radii.rSm }]}>
+          <Text
+            style={{
+              fontFamily: fonts.condensed,
+              fontSize: fs(11.5),
+              letterSpacing: 1,
+              textTransform: 'uppercase',
+              color: colors.ink2,
+              marginBottom: 4,
+            }}
+          >
+            {PLATFORM_LABELS[contact.platform]}
+          </Text>
           {editingId === contact.id ? (
             <View style={styles.editRow}>
-              <TextField
-                style={styles.editInput}
-                value={editHandle}
-                onChangeText={setEditHandle}
-                autoFocus
-              />
+              <TextField style={styles.editInput} value={editHandle} onChangeText={setEditHandle} autoFocus />
               <Pressable style={styles.smallButton} onPress={saveEdit}>
-                <Text style={styles.smallButtonText}>Save</Text>
+                <Text style={smallButtonText}>Save</Text>
               </Pressable>
               <Pressable style={styles.smallButton} onPress={() => setEditingId(null)}>
-                <Text style={styles.smallButtonText}>Cancel</Text>
+                <Text style={smallButtonText}>Cancel</Text>
               </Pressable>
             </View>
           ) : (
             <View style={styles.editRow}>
-              <Text style={styles.handleText}>{contact.handle}</Text>
-              <Pressable
-                style={styles.smallButton}
-                onPress={() => startEdit(contact.id, contact.handle)}
-              >
-                <Text style={styles.smallButtonText}>Edit</Text>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fs(13), color: colors.ink, flex: 1 }}>
+                {contact.handle}
+              </Text>
+              <Pressable style={styles.smallButton} onPress={() => startEdit(contact.id, contact.handle)}>
+                <Text style={smallButtonText}>Edit</Text>
               </Pressable>
               <Pressable
                 style={[styles.smallButton, !canDelete && styles.smallButtonDisabled]}
                 disabled={!canDelete}
                 onPress={() => deleteContact.mutate(contact.id)}
               >
-                <Text style={styles.smallButtonText}>Delete</Text>
+                <Text style={smallButtonText}>Delete</Text>
               </Pressable>
             </View>
           )}
@@ -123,22 +143,35 @@ export function ContactsSection({ profileId }: { profileId: string | undefined }
       {availablePlatforms.length > 0 ? (
         <View style={styles.addSection}>
           <View style={styles.chipRow}>
-            {availablePlatforms.map((p) => (
-              <Pressable
-                key={p}
-                style={[styles.platformChip, newPlatform === p && styles.platformChipSelected]}
-                onPress={() => setNewPlatform(p)}
-              >
-                <Text
+            {availablePlatforms.map((p) => {
+              const selected = newPlatform === p;
+              return (
+                <Pressable
+                  key={p}
                   style={[
-                    styles.platformChipText,
-                    newPlatform === p && styles.platformChipTextSelected,
+                    styles.platformChip,
+                    {
+                      borderRadius: radii.pill,
+                      borderColor: selected ? colors.brass : colors.line,
+                      backgroundColor: selected ? colors.brass : 'transparent',
+                    },
                   ]}
+                  onPress={() => setNewPlatform(p)}
                 >
-                  {PLATFORM_LABELS[p]}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text
+                    style={{
+                      fontFamily: fonts.condensedSemi,
+                      fontSize: fs(11.5),
+                      letterSpacing: 0.8,
+                      textTransform: 'uppercase',
+                      color: selected ? colors.bg : colors.ink,
+                    }}
+                  >
+                    {PLATFORM_LABELS[p]}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
           {newPlatform && (
             <View style={styles.editRow}>
@@ -149,97 +182,53 @@ export function ContactsSection({ profileId }: { profileId: string | undefined }
                 onChangeText={setNewHandle}
               />
               <Pressable style={styles.smallButton} onPress={submitNewContact}>
-                <Text style={styles.smallButtonText}>Add contact</Text>
+                <Text style={smallButtonText}>Add contact</Text>
               </Pressable>
             </View>
           )}
         </View>
       ) : (
-        <Text style={styles.hint}>All contact platforms added.</Text>
+        <Text style={{ fontFamily: fonts.body, fontSize: fs(12.5), color: colors.ink2 }}>
+          All contact platforms added.
+        </Text>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  sectionTitle: {
-    fontSize: fontSizes.lg,
-    fontWeight: fontWeights.semibold,
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
-  },
-  hint: {
-    fontSize: fontSizes.xs,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
   row: {
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  platformLabel: {
-    fontSize: fontSizes.sm,
-    color: colors.textSecondary,
-    fontWeight: fontWeights.medium,
-    marginBottom: 4,
-  },
-  handleText: {
-    fontSize: fontSizes.md,
-    color: colors.textPrimary,
-    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 8,
   },
   editRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: 8,
   },
   editInput: {
     flex: 1,
   },
   smallButton: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: colors.brass,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
   },
   smallButtonDisabled: {
-    borderColor: colors.disabled,
-    opacity: 0.5,
-  },
-  smallButtonText: {
-    color: colors.brassDark,
-    fontSize: fontSizes.xs,
-    fontWeight: fontWeights.semibold,
+    opacity: 0.4,
   },
   addSection: {
-    marginTop: spacing.sm,
+    marginTop: 4,
   },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginBottom: spacing.sm,
+    gap: 8,
+    marginBottom: 10,
   },
   platformChip: {
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.pill,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    backgroundColor: colors.creamDark,
-  },
-  platformChipSelected: {
-    backgroundColor: colors.brass,
-    borderColor: colors.brass,
-  },
-  platformChipText: {
-    fontSize: fontSizes.sm,
-    color: colors.textPrimary,
-  },
-  platformChipTextSelected: {
-    color: colors.navy,
-    fontWeight: fontWeights.semibold,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
   },
 });

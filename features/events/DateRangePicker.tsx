@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, fontSizes, fontWeights, radii, spacing } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 // Flight-style start/end range input: two typeable date fields (YYYY-MM-DD)
 // plus a shared calendar picker that opens when a field is focused. Typing and
@@ -49,6 +49,7 @@ function maskDateInput(raw: string): string {
 type Field = 'start' | 'end';
 
 export function DateRangePicker({ startDate, endDate, onChange, error }: DateRangePickerProps) {
+  const { colors, fonts, fs, radii } = useTheme();
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
@@ -136,7 +137,14 @@ export function DateRangePicker({ startDate, endDate, onChange, error }: DateRan
 
   const renderField = (field: Field, label: string) => (
     <View style={styles.fieldWrap}>
-      <Text style={styles.label}>{label}</Text>
+      <Text
+        style={[
+          styles.label,
+          { fontFamily: fonts.mono, fontSize: fs(9), letterSpacing: 1.6, color: colors.ink2 },
+        ]}
+      >
+        {label.toUpperCase()}
+      </Text>
       <TextInput
         accessibilityLabel={label}
         value={drafts[field]}
@@ -148,15 +156,25 @@ export function DateRangePicker({ startDate, endDate, onChange, error }: DateRan
         }}
         onBlur={() => commitTyped(field, drafts[field])}
         placeholder="YYYY-MM-DD"
-        placeholderTextColor={colors.textSecondary}
+        placeholderTextColor={colors.ink2}
         keyboardType="numeric"
         autoCapitalize="none"
         style={[
           styles.input,
-          fieldErrors[field] ? styles.inputError : null,
+          {
+            backgroundColor: colors.fieldBg,
+            borderColor: fieldErrors[field] ? colors.red : colors.line,
+            color: colors.ink,
+            fontFamily: fonts.body,
+            fontSize: fs(15),
+          },
         ]}
       />
-      {fieldErrors[field] ? <Text style={styles.fieldError}>{fieldErrors[field]}</Text> : null}
+      {fieldErrors[field] ? (
+        <Text style={[styles.fieldError, { color: colors.red, fontFamily: fonts.body, fontSize: fs(12) }]}>
+          {fieldErrors[field]}
+        </Text>
+      ) : null}
     </View>
   );
 
@@ -171,12 +189,21 @@ export function DateRangePicker({ startDate, endDate, onChange, error }: DateRan
           style={styles.calToggle}
           hitSlop={8}
         >
-          <Text style={styles.calToggleGlyph}>📅</Text>
+          <Text style={[styles.calToggleGlyph, { color: colors.brass, fontSize: fs(20) }]}>📅</Text>
         </Pressable>
       </View>
 
       {calendarOpen ? (
-        <View style={[styles.calendar, error ? styles.calendarError : null]}>
+        <View
+          style={[
+            styles.calendar,
+            {
+              backgroundColor: colors.surface,
+              borderColor: error ? colors.red : colors.line,
+              borderRadius: radii.rSm,
+            },
+          ]}
+        >
           <View style={styles.monthRow}>
             <Pressable
               accessibilityLabel="Previous month"
@@ -184,9 +211,11 @@ export function DateRangePicker({ startDate, endDate, onChange, error }: DateRan
               style={styles.navBtn}
               hitSlop={8}
             >
-              <Text style={styles.navGlyph}>‹</Text>
+              <Text style={[styles.navGlyph, { color: colors.brass, fontSize: fs(20) }]}>‹</Text>
             </Pressable>
-            <Text style={styles.monthTitle}>
+            <Text
+              style={{ fontFamily: fonts.condensedSemi, fontSize: fs(15), color: colors.ink }}
+            >
               {MONTHS[viewMonth]} {viewYear}
             </Text>
             <Pressable
@@ -195,13 +224,23 @@ export function DateRangePicker({ startDate, endDate, onChange, error }: DateRan
               style={styles.navBtn}
               hitSlop={8}
             >
-              <Text style={styles.navGlyph}>›</Text>
+              <Text style={[styles.navGlyph, { color: colors.brass, fontSize: fs(20) }]}>›</Text>
             </Pressable>
           </View>
 
           <View style={styles.weekRow}>
             {WEEKDAYS.map((w, i) => (
-              <Text key={`${w}-${i}`} style={styles.weekday}>
+              <Text
+                key={`${w}-${i}`}
+                style={{
+                  flex: 1,
+                  textAlign: 'center',
+                  paddingVertical: 2,
+                  fontFamily: fonts.mono,
+                  fontSize: fs(10),
+                  color: colors.ink2,
+                }}
+              >
                 {w}
               </Text>
             ))}
@@ -215,8 +254,8 @@ export function DateRangePicker({ startDate, endDate, onChange, error }: DateRan
                 const disabled = value < today;
                 const isStart = value === startDate;
                 const isEnd = value === endDate;
-                const inRange =
-                  startDate && endDate && value > startDate && value < endDate;
+                const isEndpoint = isStart || isEnd;
+                const inRange = startDate && endDate && value > startDate && value < endDate;
                 return (
                   <Pressable
                     key={col}
@@ -225,16 +264,17 @@ export function DateRangePicker({ startDate, endDate, onChange, error }: DateRan
                     onPress={() => handleDayPress(day)}
                     style={[
                       styles.day,
-                      inRange ? styles.dayInRange : null,
-                      isStart || isEnd ? styles.dayEndpoint : null,
+                      { borderRadius: 6 },
+                      inRange ? { backgroundColor: colors.likeBg } : null,
+                      isEndpoint ? { backgroundColor: colors.brass } : null,
                     ]}
                   >
                     <Text
-                      style={[
-                        styles.dayText,
-                        disabled ? styles.dayTextDisabled : null,
-                        isStart || isEnd ? styles.dayTextEndpoint : null,
-                      ]}
+                      style={{
+                        fontFamily: isEndpoint ? fonts.condensedSemi : fonts.body,
+                        fontSize: fs(13.5),
+                        color: disabled ? colors.line : isEndpoint ? colors.bg : colors.ink,
+                      }}
                     >
                       {day}
                     </Text>
@@ -244,7 +284,15 @@ export function DateRangePicker({ startDate, endDate, onChange, error }: DateRan
             </View>
           ))}
 
-          <Text style={styles.hint}>
+          <Text
+            style={{
+              marginTop: 4,
+              textAlign: 'center',
+              fontFamily: fonts.body,
+              fontSize: fs(12),
+              color: colors.ink2,
+            }}
+          >
             {!startDate
               ? 'Tap the first day of the event — or just type the dates'
               : !endDate
@@ -253,128 +301,70 @@ export function DateRangePicker({ startDate, endDate, onChange, error }: DateRan
           </Text>
         </View>
       ) : null}
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? (
+        <Text style={[styles.errorText, { color: colors.red, fontFamily: fonts.body, fontSize: fs(13) }]}>
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: spacing.md,
+    marginBottom: 16,
   },
   fieldsRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: 8,
     alignItems: 'flex-end',
   },
   fieldWrap: {
     flex: 1,
   },
   label: {
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.medium,
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
+    marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    backgroundColor: colors.white,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    fontSize: fontSizes.md,
-    color: colors.textPrimary,
-  },
-  inputError: {
-    borderColor: colors.red,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
   },
   fieldError: {
     marginTop: 2,
-    fontSize: fontSizes.xs,
-    color: colors.red,
   },
   calToggle: {
-    paddingBottom: spacing.sm + 2,
-    paddingHorizontal: spacing.xs,
+    paddingBottom: 14,
+    paddingHorizontal: 4,
   },
-  calToggleGlyph: {
-    fontSize: fontSizes.lg,
-  },
+  calToggleGlyph: {},
   calendar: {
-    marginTop: spacing.sm,
+    marginTop: 8,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    backgroundColor: colors.white,
-    padding: spacing.sm,
-  },
-  calendarError: {
-    borderColor: colors.red,
+    padding: 12,
   },
   monthRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.xs,
+    marginBottom: 4,
   },
   navBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  navGlyph: {
-    fontSize: fontSizes.lg,
-    color: colors.brassDark,
-    fontWeight: fontWeights.bold,
-  },
-  monthTitle: {
-    fontSize: fontSizes.md,
-    fontWeight: fontWeights.semibold,
-    color: colors.textPrimary,
-  },
+  navGlyph: {},
   weekRow: {
     flexDirection: 'row',
-  },
-  weekday: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: fontSizes.xs,
-    color: colors.textSecondary,
-    paddingVertical: 2,
   },
   day: {
     flex: 1,
     aspectRatio: 1.15,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radii.sm,
-  },
-  dayInRange: {
-    backgroundColor: colors.creamDark,
-  },
-  dayEndpoint: {
-    backgroundColor: colors.navy,
-  },
-  dayText: {
-    fontSize: fontSizes.sm,
-    color: colors.textPrimary,
-  },
-  dayTextDisabled: {
-    color: colors.border,
-  },
-  dayTextEndpoint: {
-    color: colors.textInverse,
-    fontWeight: fontWeights.semibold,
-  },
-  hint: {
-    marginTop: spacing.xs,
-    fontSize: fontSizes.xs,
-    color: colors.textSecondary,
-    textAlign: 'center',
   },
   errorText: {
-    marginTop: spacing.xs,
-    color: colors.red,
-    fontSize: fontSizes.sm,
+    marginTop: 4,
   },
 });

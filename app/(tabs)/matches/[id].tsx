@@ -1,8 +1,15 @@
-import { useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Card, Screen } from '../../../theme/components';
-import { colors, fontSizes, fontWeights, spacing } from '../../../theme/tokens';
-import { Avatar, Chip, ContactLine } from '../../../features/matches/components';
+// The Partner Dossier — restyled match detail. A single profile photo (the
+// schema has one photo, not a gallery) with a scrim identity block, the
+// contact-reveal box, values, bio, and competition record. No floor-footage /
+// photo-gallery section: the schema has neither video clips nor multiple
+// photos per profile (see the WP log for the full list of compromises).
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Image } from 'expo-image';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Screen } from '../../../theme/components';
+import { useTheme } from '../../../theme/ThemeProvider';
+import { Chip, ContactLine } from '../../../features/matches/components';
+import { formatRelativeTime } from '../../../features/matches/format';
 import {
   useMatchDetail,
   useOtherContacts,
@@ -22,8 +29,12 @@ const ROLE_LABELS: Record<string, string> = {
   follower: 'Follower',
 };
 
+const PLACEMENT_HIGHLIGHT = /1st|2nd|3rd|Finals/i;
+
 export default function MatchDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const { colors, fonts, fs, radii } = useTheme();
   const { data: match, isLoading, isError, error } = useMatchDetail(id);
   const otherProfileId = match?.otherProfile.id;
 
@@ -42,7 +53,7 @@ export default function MatchDetailScreen() {
   if (isError || !match) {
     return (
       <Screen style={styles.centered}>
-        <Text style={styles.errorText}>
+        <Text style={{ fontFamily: fonts.body, fontSize: fs(14), color: colors.red, textAlign: 'center' }}>
           {error instanceof Error ? error.message : 'Match not found.'}
         </Text>
       </Screen>
@@ -50,65 +61,196 @@ export default function MatchDetailScreen() {
   }
 
   const { otherProfile } = match;
+  const roleLine = [ROLE_LABELS[otherProfile.role] ?? otherProfile.role, entry ? DIVISION_LABELS[entry.division] ?? entry.division : null]
+    .filter(Boolean)
+    .join(' · ');
+  const initial = otherProfile.displayName.trim().charAt(0).toUpperCase() || '?';
 
   return (
     <Screen style={styles.screen}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Card style={styles.headerCard}>
-          <View style={styles.headerRow}>
-            <Avatar uri={otherProfile.photoUrl} name={otherProfile.displayName} size={80} />
-            <View style={styles.headerText}>
-              <Text style={styles.name}>{otherProfile.displayName}</Text>
-              <Text style={styles.subline}>
-                {ROLE_LABELS[otherProfile.role] ?? otherProfile.role}
-                {entry ? ` · ${DIVISION_LABELS[entry.division] ?? entry.division}` : ''}
+        <View style={[styles.photoHeader, { backgroundColor: colors.photoBg }]}>
+          {otherProfile.photoUrl ? (
+            <Image source={{ uri: otherProfile.photoUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          ) : (
+            <View style={styles.monogramWrap}>
+              <Text style={{ fontFamily: fonts.serif, fontSize: fs(56), color: 'rgba(246,241,231,0.34)' }}>
+                {initial}
               </Text>
             </View>
+          )}
+          <View style={[styles.scrim, { backgroundColor: colors.scrim }]}>
+            <View style={styles.pairedRow}>
+              <View style={[styles.pairedHairline, { backgroundColor: colors.brass }]} />
+              <Text
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: fs(9),
+                  letterSpacing: 1.6,
+                  textTransform: 'uppercase',
+                  color: colors.brass,
+                }}
+              >
+                Paired · {formatRelativeTime(match.createdAt)}
+              </Text>
+            </View>
+            <Text style={{ fontFamily: fonts.serif, fontSize: fs(32), lineHeight: fs(34), color: colors.ink }}>
+              {otherProfile.displayName}
+            </Text>
+            {roleLine ? (
+              <Text
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: fs(9),
+                  letterSpacing: 1.4,
+                  textTransform: 'uppercase',
+                  color: colors.ink2,
+                  marginTop: 5,
+                }}
+              >
+                {roleLine}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.body}>
+          <View
+            style={[
+              styles.contactBox,
+              { backgroundColor: colors.likeBg, borderColor: colors.brass, borderRadius: radii.rSm },
+            ]}
+          >
+            <View style={styles.contactBoxHeader}>
+              <Text style={{ color: colors.brass, fontSize: fs(11) }}>✦</Text>
+              <Text
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: fs(9),
+                  letterSpacing: 1.6,
+                  textTransform: 'uppercase',
+                  color: colors.brass,
+                }}
+              >
+                Contact unsealed
+              </Text>
+            </View>
+            {contactsLoading ? (
+              <ActivityIndicator color={colors.brass} />
+            ) : !contacts || contacts.length === 0 ? (
+              <Text style={{ fontFamily: fonts.body, fontSize: fs(13), color: colors.ink2 }}>
+                No contact info shared.
+              </Text>
+            ) : (
+              contacts.map((c) => <ContactLine key={c.id} platform={c.platform} handle={c.handle} />)
+            )}
           </View>
 
-          {otherProfile.values.length > 0 && (
+          {otherProfile.values.length > 0 ? (
             <View style={styles.chipRow}>
               {otherProfile.values.map((value) => (
                 <Chip key={value} label={value} />
               ))}
             </View>
-          )}
+          ) : null}
 
-          {otherProfile.bio && <Text style={styles.bio}>{otherProfile.bio}</Text>}
-        </Card>
+          {otherProfile.bio ? (
+            <Text style={{ fontFamily: fonts.body, fontSize: fs(15), lineHeight: fs(24), color: colors.ink }}>
+              {otherProfile.bio}
+            </Text>
+          ) : null}
 
-        <Text style={styles.matchCopy}>
-          You&apos;re matched for {match.contestName} at {match.eventName} — reach out and
-          confirm!
-        </Text>
-
-        <Card style={styles.section}>
-          <Text style={styles.sectionTitle}>Competition history</Text>
-          {historyLoading && <ActivityIndicator color={colors.brass} />}
-          {!historyLoading && (!history || history.length === 0) && (
-            <Text style={styles.mutedText}>No competition history yet.</Text>
-          )}
-          {history?.map((h) => (
-            <View key={h.id} style={styles.historyRow}>
-              <Text style={styles.historyTitle}>
-                {h.contestName} @ {h.eventName} ({h.year})
+          <View style={styles.section}>
+            <Text
+              style={{
+                fontFamily: fonts.mono,
+                fontSize: fs(9),
+                letterSpacing: 1.6,
+                textTransform: 'uppercase',
+                color: colors.ink2,
+              }}
+            >
+              Competition record
+            </Text>
+            {historyLoading ? (
+              <ActivityIndicator color={colors.brass} />
+            ) : !history || history.length === 0 ? (
+              <Text style={{ fontFamily: fonts.body, fontSize: fs(13), color: colors.ink2 }}>
+                No competition history yet.
               </Text>
-              <Text style={styles.mutedText}>{h.placement ?? 'No placement recorded'}</Text>
-            </View>
-          ))}
-        </Card>
-
-        <Card style={styles.section}>
-          <Text style={styles.sectionTitle}>Contact</Text>
-          {contactsLoading && <ActivityIndicator color={colors.brass} />}
-          {!contactsLoading && (!contacts || contacts.length === 0) && (
-            <Text style={styles.mutedText}>No contact info shared.</Text>
-          )}
-          {contacts?.map((c) => (
-            <ContactLine key={c.id} platform={c.platform} handle={c.handle} />
-          ))}
-        </Card>
+            ) : (
+              history.map((h) => (
+                <View key={h.id} style={[styles.historyRow, { borderTopColor: colors.line }]}>
+                  <Text style={{ fontFamily: fonts.deco, fontSize: fs(18), color: colors.brass, width: 46 }}>
+                    {h.year}
+                  </Text>
+                  <View style={styles.historyText}>
+                    <Text style={{ fontFamily: fonts.bodyMedium, fontSize: fs(14), color: colors.ink }}>
+                      {h.contestName}
+                    </Text>
+                    <Text
+                      style={{
+                        fontFamily: fonts.condensed,
+                        fontSize: fs(12),
+                        letterSpacing: 0.6,
+                        textTransform: 'uppercase',
+                        color: colors.ink2,
+                        marginTop: 2,
+                      }}
+                    >
+                      {h.eventName}
+                    </Text>
+                  </View>
+                  <Text
+                    style={{
+                      fontFamily: fonts.condensedSemi,
+                      fontSize: fs(12),
+                      letterSpacing: 0.8,
+                      textTransform: 'uppercase',
+                      color: h.placement && PLACEMENT_HIGHLIGHT.test(h.placement) ? colors.brass : colors.ink2,
+                    }}
+                  >
+                    {h.placement ?? 'No placement recorded'}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+        </View>
       </ScrollView>
+
+      <View style={[styles.footer, { backgroundColor: colors.scrim, borderTopColor: colors.line }]}>
+        <Text
+          style={{
+            fontFamily: fonts.mono,
+            fontSize: fs(8.5),
+            letterSpacing: 1.4,
+            textTransform: 'uppercase',
+            color: colors.ink2,
+            lineHeight: fs(13),
+          }}
+        >
+          {match.eventName}
+          {'\n'}
+          {match.contestName}
+        </Text>
+        <Pressable
+          onPress={() => router.back()}
+          style={[styles.backPill, { borderColor: colors.brass, borderRadius: radii.pill }]}
+        >
+          <Text
+            style={{
+              fontFamily: fonts.condensedSemi,
+              fontSize: fs(13),
+              letterSpacing: 1.6,
+              textTransform: 'uppercase',
+              color: colors.brass,
+            }}
+          >
+            Back to the card
+          </Text>
+        </Pressable>
+      </View>
     </Screen>
   );
 }
@@ -120,78 +262,87 @@ const styles = StyleSheet.create({
   centered: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.lg,
+    padding: 24,
   },
   scrollContent: {
-    padding: spacing.md,
+    paddingBottom: 24,
   },
-  errorText: {
-    fontSize: fontSizes.md,
-    color: colors.red,
-    textAlign: 'center',
+  photoHeader: {
+    height: 214,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  headerCard: {
-    marginBottom: spacing.md,
+  monogramWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerRow: {
+  scrim: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: 20,
+  },
+  pairedRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
   },
-  headerText: {
-    marginLeft: spacing.md,
-    flexShrink: 1,
+  pairedHairline: {
+    width: 18,
+    height: 1,
   },
-  name: {
-    fontSize: fontSizes.xl,
-    fontWeight: fontWeights.bold,
-    color: colors.textPrimary,
+  body: {
+    padding: 20,
+    gap: 22,
   },
-  subline: {
-    fontSize: fontSizes.sm,
-    color: colors.textSecondary,
-    marginTop: 4,
+  contactBox: {
+    padding: 18,
+    borderWidth: 1,
+    gap: 8,
+  },
+  contactBoxHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 3,
   },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginTop: spacing.md,
-  },
-  bio: {
-    fontSize: fontSizes.md,
-    color: colors.textPrimary,
-    marginTop: spacing.md,
-    lineHeight: 22,
-  },
-  matchCopy: {
-    fontSize: fontSizes.md,
-    fontWeight: fontWeights.medium,
-    color: colors.brassDark,
-    marginBottom: spacing.md,
-    textAlign: 'center',
+    gap: 5,
   },
   section: {
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: fontSizes.lg,
-    fontWeight: fontWeights.semibold,
-    color: colors.textPrimary,
-    marginBottom: spacing.sm,
+    gap: 9,
   },
   historyRow: {
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 18,
+    paddingVertical: 11,
+    borderTopWidth: 1,
   },
-  historyTitle: {
-    fontSize: fontSizes.md,
-    color: colors.textPrimary,
-    fontWeight: fontWeights.medium,
+  historyText: {
+    flex: 1,
+    minWidth: 0,
   },
-  mutedText: {
-    fontSize: fontSizes.sm,
-    color: colors.textSecondary,
-    marginTop: 2,
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    padding: 14,
+    borderTopWidth: 1,
+  },
+  backPill: {
+    paddingVertical: 9,
+    paddingHorizontal: 18,
+    borderWidth: 1,
   },
 });

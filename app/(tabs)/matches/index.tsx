@@ -1,8 +1,9 @@
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../../theme/components';
-import { colors, fontSizes, fontWeights, radii, spacing } from '../../../theme/tokens';
+import { useTheme } from '../../../theme/ThemeProvider';
 import { Avatar } from '../../../features/matches/components';
+import { formatRelativeTime } from '../../../features/matches/format';
 import { useMatches } from '../../../features/matches/hooks';
 import type { MatchListItem } from '../../../features/matches/api';
 
@@ -30,8 +31,16 @@ function groupByEvent(matches: MatchListItem[]): EventGroup[] {
   return groups;
 }
 
+const DIVISION_LABELS: Record<string, string> = {
+  novice: 'Novice',
+  amateur: 'Amateur',
+  advanced: 'Advanced',
+  open: 'Open',
+};
+
 export default function MatchesScreen() {
   const router = useRouter();
+  const { colors, fonts, fs, radii } = useTheme();
   const { data: matches, isLoading, isError, error } = useMatches();
 
   if (isLoading) {
@@ -45,19 +54,41 @@ export default function MatchesScreen() {
   if (isError) {
     return (
       <Screen style={styles.centered}>
-        <Text style={styles.errorText}>
+        <Text style={{ fontFamily: fonts.body, fontSize: fs(14), color: colors.red, textAlign: 'center' }}>
           {error instanceof Error ? error.message : 'Could not load matches.'}
         </Text>
       </Screen>
     );
   }
 
+  const header = (
+    <View>
+      <Text style={{ fontFamily: fonts.display, fontSize: fs(25), letterSpacing: 1.2, color: colors.ink }}>
+        Your Dance Card
+      </Text>
+      <Text style={{ fontFamily: fonts.body, fontSize: fs(14), color: colors.ink2, marginTop: 5 }}>
+        Mutual yeses only. Contact details unlock here.
+      </Text>
+      <View style={styles.deco}>
+        <View style={[styles.decoRule, { backgroundColor: colors.cardLine }]} />
+        <View style={[styles.diamond, { backgroundColor: colors.brass }]} />
+        <View style={[styles.diamond, { borderWidth: 1, borderColor: colors.cardLine }]} />
+        <View style={[styles.decoRule, { backgroundColor: colors.cardLine }]} />
+      </View>
+    </View>
+  );
+
   if (!matches || matches.length === 0) {
     return (
-      <Screen style={styles.centered}>
-        <Text style={styles.emptyText}>
-          Matches appear here when you and a partner both say yes.
-        </Text>
+      <Screen style={styles.screen}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {header}
+          <Text
+            style={{ fontFamily: fonts.body, fontSize: fs(14), color: colors.ink2, marginTop: 22 }}
+          >
+            Matches appear here when you and a partner both say yes.
+          </Text>
+        </ScrollView>
       </Screen>
     );
   }
@@ -67,20 +98,72 @@ export default function MatchesScreen() {
   return (
     <Screen style={styles.screen}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {header}
         {groups.map((group) => (
           <View key={group.eventId || group.eventName} style={styles.group}>
-            <Text style={styles.groupTitle}>{group.eventName}</Text>
+            <View style={styles.groupHeaderRow}>
+              <Text
+                style={{
+                  fontFamily: fonts.condensedSemi,
+                  fontSize: fs(13),
+                  letterSpacing: 1.8,
+                  textTransform: 'uppercase',
+                  color: colors.brass,
+                }}
+              >
+                {group.eventName}
+              </Text>
+              <View style={[styles.groupRule, { backgroundColor: colors.cardLine }]} />
+            </View>
             {group.matches.map((match) => (
               <Pressable
                 key={match.id}
-                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                style={({ pressed }) => [
+                  styles.row,
+                  {
+                    backgroundColor: colors.surface,
+                    borderRadius: radii.rSm,
+                    borderColor: pressed ? colors.brass : colors.line,
+                  },
+                ]}
                 onPress={() => router.push(`/matches/${match.id}`)}
               >
                 <Avatar uri={match.otherProfile.photoUrl} name={match.otherProfile.displayName} />
                 <View style={styles.rowText}>
-                  <Text style={styles.rowName}>{match.otherProfile.displayName}</Text>
-                  <Text style={styles.rowContest}>{match.contestName}</Text>
+                  <Text style={{ fontFamily: fonts.serif, fontSize: fs(19), color: colors.ink, lineHeight: fs(23) }}>
+                    {match.otherProfile.displayName}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: fonts.condensed,
+                      fontSize: fs(12.5),
+                      letterSpacing: 0.8,
+                      textTransform: 'uppercase',
+                      color: colors.ink2,
+                      marginTop: 2,
+                    }}
+                  >
+                    {match.contestName} · {match.division ? DIVISION_LABELS[match.division] ?? match.division : '—'}
+                  </Text>
                 </View>
+                <View style={styles.rowRight}>
+                  <Text style={{ fontFamily: fonts.mono, fontSize: fs(10), letterSpacing: 1, color: colors.brass }}>
+                    {match.firstHandle ?? ''}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: fonts.mono,
+                      fontSize: fs(8.5),
+                      letterSpacing: 1.4,
+                      textTransform: 'uppercase',
+                      color: colors.ink2,
+                      marginTop: 3,
+                    }}
+                  >
+                    {formatRelativeTime(match.createdAt)}
+                  </Text>
+                </View>
+                <Text style={{ fontFamily: fonts.mono, fontSize: fs(13), color: colors.ink2 }}>→</Text>
               </Pressable>
             ))}
           </View>
@@ -97,55 +180,54 @@ const styles = StyleSheet.create({
   centered: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.lg,
+    padding: 24,
   },
   scrollContent: {
-    padding: spacing.md,
+    padding: 16,
+    paddingBottom: 40,
   },
-  emptyText: {
-    fontSize: fontSizes.md,
-    color: colors.textSecondary,
-    textAlign: 'center',
+  deco: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginTop: 13,
+    width: 240,
   },
-  errorText: {
-    fontSize: fontSizes.md,
-    color: colors.red,
-    textAlign: 'center',
+  decoRule: {
+    flex: 1,
+    height: 1,
+  },
+  diamond: {
+    width: 5,
+    height: 5,
+    transform: [{ rotate: '45deg' }],
   },
   group: {
-    marginBottom: spacing.lg,
+    marginTop: 22,
   },
-  groupTitle: {
-    fontSize: fontSizes.lg,
-    fontWeight: fontWeights.semibold,
-    color: colors.textPrimary,
-    marginBottom: spacing.sm,
+  groupHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  groupRule: {
+    flex: 1,
+    height: 1,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.creamDark,
-    borderRadius: radii.lg,
+    gap: 16,
+    padding: 14,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  rowPressed: {
-    opacity: 0.85,
+    marginBottom: 10,
   },
   rowText: {
-    marginLeft: spacing.md,
-    flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
   },
-  rowName: {
-    fontSize: fontSizes.md,
-    fontWeight: fontWeights.semibold,
-    color: colors.textPrimary,
-  },
-  rowContest: {
-    fontSize: fontSizes.sm,
-    color: colors.textSecondary,
-    marginTop: 2,
+  rowRight: {
+    alignItems: 'flex-end',
   },
 });

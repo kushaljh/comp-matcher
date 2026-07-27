@@ -1,5 +1,5 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, fontSizes, fontWeights, radii, spacing } from '../../../theme/tokens';
+import { useTheme } from '../../../theme/ThemeProvider';
 import { confirmAsync } from '../confirm';
 import { useDeleteEntry, useMyEntries } from '../hooks';
 
@@ -11,6 +11,7 @@ const DIVISION_LABELS: Record<string, string> = {
 };
 
 export function EntriesSection({ profileId }: { profileId: string | undefined }) {
+  const { colors, fonts, fs, radii } = useTheme();
   const { data: entries, isLoading } = useMyEntries(profileId);
   const deleteEntry = useDeleteEntry(profileId);
 
@@ -27,77 +28,107 @@ export function EntriesSection({ profileId }: { profileId: string | undefined })
 
   return (
     <View>
-      <Text style={styles.sectionTitle}>My entries</Text>
+      <Text
+        style={{
+          fontFamily: fonts.mono,
+          fontSize: fs(9),
+          letterSpacing: 1.6,
+          textTransform: 'uppercase',
+          color: colors.ink2,
+          marginBottom: 9,
+        }}
+      >
+        Your entries · one division per contest
+      </Text>
       {isLoading && <ActivityIndicator color={colors.brass} />}
       {!isLoading && rows.length === 0 && (
-        <Text style={styles.hint}>You haven&apos;t entered any contests yet.</Text>
+        <Text style={{ fontFamily: fonts.body, fontSize: fs(13), color: colors.ink2 }}>
+          Nothing entered yet — pick a contest in The Season.
+        </Text>
       )}
-      {rows.map((entry) => (
-        <View key={entry.id} style={styles.row}>
-          <View style={styles.rowText}>
-            <Text style={styles.rowTitle}>
-              {entry.contestName} @ {entry.eventName}
-            </Text>
-            <Text style={styles.rowSubtitle}>
-              {DIVISION_LABELS[entry.division] ?? entry.division}
-              {entry.note ? ` · ${entry.note}` : ''}
-            </Text>
+      <View style={styles.list}>
+        {rows.map((entry) => (
+          <View key={entry.id} style={[styles.row, { backgroundColor: colors.fieldBg, borderRadius: radii.rSm }]}>
+            <View style={styles.rowText}>
+              <Text style={{ fontFamily: fonts.serif, fontSize: fs(17), color: colors.ink, lineHeight: fs(21) }}>
+                {entry.eventName}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: fonts.condensed,
+                  fontSize: fs(12),
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                  color: colors.ink2,
+                  marginTop: 2,
+                }}
+              >
+                {entry.contestName}
+              </Text>
+            </View>
+            <View style={[styles.divisionPill, { backgroundColor: colors.brass, borderRadius: radii.pill }]}>
+              <Text
+                style={{
+                  fontFamily: fonts.condensedSemi,
+                  fontSize: fs(11.5),
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                  color: colors.bg,
+                }}
+              >
+                {DIVISION_LABELS[entry.division] ?? entry.division}
+              </Text>
+            </View>
+            <Pressable
+              style={[styles.leaveButton, { borderColor: colors.red }]}
+              onPress={() => handleLeave(entry.id, entry.contestName, entry.eventName)}
+            >
+              <Text
+                style={{
+                  fontFamily: fonts.condensedSemi,
+                  fontSize: fs(11),
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                  color: colors.red,
+                }}
+              >
+                Leave
+              </Text>
+            </Pressable>
           </View>
-          <Pressable
-            style={styles.leaveButton}
-            onPress={() => handleLeave(entry.id, entry.contestName, entry.eventName)}
-          >
-            <Text style={styles.leaveButtonText}>Leave</Text>
-          </Pressable>
-        </View>
-      ))}
+        ))}
+      </View>
+      <Text style={{ fontFamily: fonts.body, fontSize: fs(12.5), color: colors.ink2, marginTop: 9 }}>
+        Your role is fixed account-wide, but division is set per entry — novice at one event and
+        advanced at another is fine.
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  sectionTitle: {
-    fontSize: fontSizes.lg,
-    fontWeight: fontWeights.semibold,
-    color: colors.textPrimary,
-    marginBottom: spacing.sm,
-  },
-  hint: {
-    fontSize: fontSizes.sm,
-    color: colors.textSecondary,
+  list: {
+    gap: 8,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 15,
   },
   rowText: {
-    flexShrink: 1,
-    marginRight: spacing.sm,
+    flex: 1,
+    minWidth: 0,
   },
-  rowTitle: {
-    fontSize: fontSizes.md,
-    fontWeight: fontWeights.medium,
-    color: colors.textPrimary,
-  },
-  rowSubtitle: {
-    fontSize: fontSizes.sm,
-    color: colors.textSecondary,
-    marginTop: 2,
+  divisionPill: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
   },
   leaveButton: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.sm,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.red,
-  },
-  leaveButtonText: {
-    color: colors.red,
-    fontSize: fontSizes.xs,
-    fontWeight: fontWeights.semibold,
   },
 });

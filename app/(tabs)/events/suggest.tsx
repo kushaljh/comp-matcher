@@ -4,10 +4,11 @@ import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { Button, Card, Screen, TextField } from '../../../theme/components';
 import { colors, fontSizes, fontWeights, spacing } from '../../../theme/tokens';
 import { useSuggestEvent } from '../../../features/events/hooks';
-import { isPlausibleUrl, isValidDateString } from '../../../features/events/format';
+import { DateRangePicker } from '../../../features/events/DateRangePicker';
+import { formatDateRange, isPlausibleUrl } from '../../../features/events/format';
 
 type FormErrors = Partial<
-  Record<'name' | 'location' | 'startDate' | 'endDate' | 'website' | 'facebook' | 'submit', string>
+  Record<'name' | 'location' | 'dates' | 'website' | 'facebook' | 'submit', string>
 >;
 
 export default function SuggestEventScreen() {
@@ -16,8 +17,8 @@ export default function SuggestEventScreen() {
 
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState<string | null>(null);
+  const [endDate, setEndDate] = useState<string | null>(null);
   const [website, setWebsite] = useState('');
   const [facebook, setFacebook] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
@@ -27,11 +28,7 @@ export default function SuggestEventScreen() {
     const next: FormErrors = {};
     if (!name.trim()) next.name = 'Required';
     if (!location.trim()) next.location = 'Required';
-    if (!isValidDateString(startDate)) next.startDate = 'Use format YYYY-MM-DD';
-    if (!isValidDateString(endDate)) next.endDate = 'Use format YYYY-MM-DD';
-    if (!next.startDate && !next.endDate && endDate < startDate) {
-      next.endDate = 'End date must be on or after the start date';
-    }
+    if (!startDate || !endDate) next.dates = 'Pick the event dates on the calendar';
     if (website.trim() && !isPlausibleUrl(website.trim())) {
       next.website = 'Must start with http:// or https://';
     }
@@ -48,8 +45,8 @@ export default function SuggestEventScreen() {
       await suggestMutation.mutateAsync({
         name: name.trim(),
         location: location.trim(),
-        start_date: startDate,
-        end_date: endDate,
+        start_date: startDate!,
+        end_date: endDate!,
         website_url: website.trim() || null,
         facebook_url: facebook.trim() || null,
       });
@@ -80,22 +77,19 @@ export default function SuggestEventScreen() {
 
         <TextField label="Name" value={name} onChangeText={setName} error={errors.name} />
         <TextField label="Location" value={location} onChangeText={setLocation} error={errors.location} />
-        <TextField
-          label="Start date (YYYY-MM-DD)"
-          value={startDate}
-          onChangeText={setStartDate}
-          error={errors.startDate}
-          placeholder="2026-08-28"
-          autoCapitalize="none"
+        <DateRangePicker
+          startDate={startDate}
+          endDate={endDate}
+          onChange={(range) => {
+            setStartDate(range.startDate);
+            setEndDate(range.endDate);
+            if (errors.dates) setErrors((prev) => ({ ...prev, dates: undefined }));
+          }}
+          error={errors.dates}
         />
-        <TextField
-          label="End date (YYYY-MM-DD)"
-          value={endDate}
-          onChangeText={setEndDate}
-          error={errors.endDate}
-          placeholder="2026-09-01"
-          autoCapitalize="none"
-        />
+        {startDate && endDate ? (
+          <Text style={styles.datesSummary}>{formatDateRange(startDate, endDate)}</Text>
+        ) : null}
         <TextField
           label="Website (optional)"
           value={website}
@@ -143,6 +137,14 @@ const styles = StyleSheet.create({
     color: colors.red,
     fontSize: fontSizes.sm,
     marginBottom: spacing.md,
+  },
+  datesSummary: {
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.medium,
+    color: colors.brassDark,
+    marginTop: -spacing.xs,
+    marginBottom: spacing.md,
+    textAlign: 'center',
   },
   confirmScreen: {
     justifyContent: 'center',

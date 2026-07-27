@@ -21,7 +21,7 @@ insert into public.events (id, name, location, start_date, end_date, website_url
 values
   ('a1111111-1111-4111-8111-111111111111', 'Camp Hollywood',            'Los Angeles, CA', '2026-08-28', '2026-09-01', 'https://camphollywood.net',   'https://www.facebook.com/CampHollywood',  'approved'),
   ('a2222222-2222-4222-8222-222222222222', 'California Balboa Classic', 'Pasadena, CA',    '2027-01-15', '2027-01-18', 'https://calbalclassic.com',   'https://www.facebook.com/CalBalClassic',  'approved'),
-  ('a3333333-3333-4333-8333-333333333333', 'Balboa Rendezvous',         'San Diego, CA',   '2027-06-11', '2027-06-14', 'https://balboarendezvous.com', null,                                     'approved')
+  ('a3333333-3333-4333-8333-333333333333', 'Stardust Slow Balboa Weekend', 'Glen Echo Park, Washington DC', '2026-11-20', '2026-11-22', 'https://stardustweekend.com', null,                            'approved')
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -39,7 +39,6 @@ values
   ('b2222222-0000-4000-8000-000000000002', 'a2222222-2222-4222-8222-222222222222', 'Strictly Lindy',  array['novice','advanced','open']::public.division[]),
   ('b2222222-0000-4000-8000-000000000003', 'a2222222-2222-4222-8222-222222222222', 'Amateur Strictly',array['amateur']::public.division[]),
 
-  -- Balboa Rendezvous
-  ('b3333333-0000-4000-8000-000000000001', 'a3333333-3333-4333-8333-333333333333', 'Strictly Balboa', array['novice','amateur','advanced','open']::public.division[]),
-  ('b3333333-0000-4000-8000-000000000002', 'a3333333-3333-4333-8333-333333333333', 'Strictly Lindy',  array['advanced','open']::public.division[])
+  -- Stardust Slow Balboa Weekend (real event: amateur + advanced strictly)
+  ('b3333333-0000-4000-8000-000000000001', 'a3333333-3333-4333-8333-333333333333', 'Strictly Slow Balboa', array['amateur','advanced']::public.division[])
 on conflict (id) do nothing;

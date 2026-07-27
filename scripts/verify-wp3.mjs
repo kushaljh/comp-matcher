@@ -2,15 +2,18 @@
 // WP3 (Swipe Deck + Matching) — live verification against the hosted Supabase.
 // ----------------------------------------------------------------------------
 // Proves the deck filters, the mutual-like -> match flow, swipe permanence, and
-// the swipe-insert RLS spoof guard, using THROWAWAY users (…@verify.test) in the
-// Balboa Rendezvous "Strictly Balboa" contest (kept clear of the CalBal
-// fixtures). All throwaways are deleted at the end (deleteUser cascades).
+// the swipe-insert RLS spoof guard, using THROWAWAY users (…@verify.test) in a
+// California Balboa Classic contest (the flagship event). Fixture and demo
+// profiles share these contests, so every assertion is MEMBERSHIP-based (has /
+// not-has) — never an exact deck size. Throwaways are deleted at the end
+// (deleteUser cascades), and no swipe ever targets a non-throwaway profile.
 //
 // Roles used:
 //   A = leader,   novice     \ mutual-matchable with B
 //   B = follower, novice     /  (the swiper we inspect)
 //   C = leader,   advanced   -> excluded from B's deck by DIVISION
 //   D = leader,   novice     -> a second candidate B can pass
+//   E = follower, novice     -> must be excluded from B's deck by ROLE
 //
 // Usage:  node scripts/verify-wp3.mjs
 // Needs (from .env): EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY,
@@ -42,6 +45,7 @@ const USERS = [
   { key: 'B', email: 'wp3-b-follower-novice@verify.test', role: 'follower', division: 'novice' },
   { key: 'C', email: 'wp3-c-leader-advanced@verify.test', role: 'leader', division: 'advanced' },
   { key: 'D', email: 'wp3-d-leader-novice@verify.test', role: 'leader', division: 'novice' },
+  { key: 'E', email: 'wp3-e-follower-novice@verify.test', role: 'follower', division: 'novice' },
 ];
 
 const admin = createClient(URL, SERVICE, {
@@ -120,14 +124,14 @@ try {
     .from('contests')
     .select('id, name, divisions, events!inner(name)')
     .eq('name', 'Strictly Balboa')
-    .eq('events.name', 'Balboa Rendezvous');
+    .eq('events.name', 'California Balboa Classic');
   if (cErr) throw new Error(`contest lookup: ${cErr.message}`);
   const contest = (contests ?? []).find(
     (c) => c.divisions.includes('novice') && c.divisions.includes('advanced')
   );
-  if (!contest) throw new Error('Balboa Rendezvous "Strictly Balboa" (novice+advanced) not found');
+  if (!contest) throw new Error('CalBal contest offering novice+advanced not found');
   const CONTEST = contest.id;
-  console.log(`Using contest ${contest.name} @ Balboa Rendezvous (${CONTEST})`);
+  console.log(`Using contest ${contest.name} @ California Balboa Classic (${CONTEST})`);
   console.log(`  divisions: ${contest.divisions.join(', ')}\n`);
 
   // Clean slate, then create the four throwaways with profiles + entries.
@@ -156,7 +160,8 @@ try {
   const a = await signIn(USERS[0].email);
   const b = await signIn(USERS[1].email);
 
-  // 1) B's deck = {A, D}; excludes C (division) and B/followers (role).
+  // 1) B's deck contains A and D; excludes C (division) and B/E (role).
+  //    Membership checks only — fixture/demo profiles share this contest.
   const deck1 = await deckIds(b, CONTEST);
   check(
     "B's deck contains A and D",
@@ -164,7 +169,7 @@ try {
     `deck=${[...deck1].length} card(s)`
   );
   check('B\'s deck EXCLUDES C (wrong division)', !deck1.has(P.C));
-  check('B\'s deck EXCLUDES B / same-role followers', !deck1.has(P.B) && deck1.size === 2);
+  check('B\'s deck EXCLUDES B and E (same role)', !deck1.has(P.B) && !deck1.has(P.E));
 
   // 2) A likes B -> no match yet; B still sees A (B hasn't swiped).
   const { error: aLikeErr } = await insertSwipe(a, CONTEST, P.A, P.B, 'like');
@@ -189,8 +194,8 @@ try {
   check('D gone from B\'s deck after pass', !deck4.has(P.D));
   const deck5 = await deckIds(b, CONTEST);
   check(
-    'get_deck permanence: D still absent on re-call (deck now empty)',
-    !deck5.has(P.D) && deck5.size === 0
+    'get_deck permanence: D still absent on re-call',
+    !deck5.has(P.D) && !deck5.has(P.A)
   );
 
   // 5) Spoof: B inserts a swipe claiming A as the swiper -> RLS must reject.

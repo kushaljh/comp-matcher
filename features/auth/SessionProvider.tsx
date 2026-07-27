@@ -42,19 +42,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!mounted) return;
 
-      // A sign-in, sign-out, or a token refresh that somehow carries a
-      // different user all mean every previously-cached query result may
-      // belong to the WRONG session's RLS-filtered view (e.g. an events
-      // list fetched a moment too early, before this session was attached,
-      // sitting in the cache as a stale empty result with nothing to ever
-      // invalidate it). Clearing the whole shared cache — rather than just
-      // marking it stale — also closes a privacy gap on shared devices:
-      // sign-out must not leave the previous user's personal data (matches,
-      // entries, profile-exists, ...) sitting in memory for whoever uses the
-      // app next on the same device.
+      // Clear the shared query cache ONLY when the signed-in identity actually
+      // changes (null→user on sign-in, user→null on sign-out, user→other).
+      // That covers the stale-anonymous-cache bug (queries fired before the
+      // session attached, cached as an empty RLS-filtered result) and the
+      // shared-device privacy gap (sign-out must not leave the previous
+      // user's matches/entries in memory for the next user).
+      //
+      // Crucially, supabase-js re-emits SIGNED_IN for the SAME user every time
+      // the tab regains focus — clearing unconditionally on SIGNED_IN made
+      // every navigate-away-and-back cold-reload the whole app.
       const newUserId = newSession?.user.id ?? null;
       const userChanged = newUserId !== lastUserId.current;
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && userChanged)) {
+      if (event === 'SIGNED_OUT' || ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && userChanged)) {
         queryClient.clear();
       }
       lastUserId.current = newUserId;

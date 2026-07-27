@@ -19,3 +19,6 @@ supabase/.branches/
 # misc
 *.log
 .DS_Store
+
+.vercel
+.env*

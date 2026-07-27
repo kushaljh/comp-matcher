@@ -18,6 +18,7 @@ export function ContestPicker({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={styles.scroll}
       contentContainerStyle={styles.row}
     >
       {entries.map((entry) => {
@@ -48,9 +49,16 @@ export function ContestPicker({
 }
 
 const styles = StyleSheet.create({
+  // The ScrollView must not flex-grow into the column, and the chips must not
+  // stretch to fill it — without both constraints react-native-web renders the
+  // chips as huge cards on tall viewports.
+  scroll: {
+    flexGrow: 0,
+  },
   row: {
     gap: spacing.sm,
     paddingVertical: spacing.xs,
+    alignItems: 'flex-start',
   },
   chip: {
     paddingVertical: spacing.sm,

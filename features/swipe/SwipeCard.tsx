@@ -162,6 +162,7 @@ const styles = StyleSheet.create({
   cardBase: {
     position: 'absolute',
     top: 0,
+    left: 0,
   },
   peek: {
     transform: [{ scale: 0.94 }, { translateY: 14 }],

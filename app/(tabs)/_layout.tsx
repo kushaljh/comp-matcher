@@ -20,17 +20,17 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen
-        name="events"
-        options={{
-          title: 'Events',
-          tabBarIcon: () => <TabIcon emoji="📅" />,
-        }}
-      />
-      <Tabs.Screen
         name="swipe"
         options={{
           title: 'Swipe',
           tabBarIcon: () => <TabIcon emoji="💃" />,
+        }}
+      />
+      <Tabs.Screen
+        name="events"
+        options={{
+          title: 'Events',
+          tabBarIcon: () => <TabIcon emoji="📅" />,
         }}
       />
       <Tabs.Screen

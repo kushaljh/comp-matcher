@@ -75,7 +75,9 @@ export default function SwipeScreen() {
   }
 
   const cardWidth = Math.min(width - spacing.md * 2, 420);
-  const cardHeight = Math.min(Math.max(height * 0.58, 380), 560);
+  // Budget the card against everything else in the column (header, picker,
+  // like/pass buttons, paddings, tab bar) so the buttons stay above the fold.
+  const cardHeight = Math.min(Math.max(height - 340, 340), 560);
 
   return (
     <Screen>

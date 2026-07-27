@@ -143,6 +143,11 @@ const styles = StyleSheet.create({
   screenContent: {
     flex: 1,
     padding: spacing.md,
+    // Phone-shaped canvas on large screens (desktop web): cap and center the
+    // content column instead of smearing a mobile layout across the window.
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
   },
   button: {
     paddingVertical: spacing.sm + 4,

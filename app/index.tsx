@@ -4,5 +4,5 @@ import { Redirect } from 'expo-router';
 // level deeper, e.g. "/events"), so app launch needs an explicit redirect
 // into a default tab.
 export default function Index() {
-  return <Redirect href="/events" />;
+  return <Redirect href="/swipe" />;
 }

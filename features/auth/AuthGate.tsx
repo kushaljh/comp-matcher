@@ -55,7 +55,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (inAuthGroup) router.replace('/(tabs)/events');
+    if (inAuthGroup) router.replace('/(tabs)/swipe');
     // `segments` is included even though the booleans above are derived from
     // it: they can be unchanged (e.g. false -> false) across a segments
     // change that still matters (e.g. "/" -> "/events"), which would

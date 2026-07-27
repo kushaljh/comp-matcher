@@ -64,24 +64,45 @@ async function uploadProfilePhoto(userId: string, uri: string): Promise<string> 
   return data.publicUrl;
 }
 
+// submitOnboarding must converge on a retry after a partial failure (e.g. the
+// profile insert lands but the contacts insert fails on a flaky connection,
+// the user clicks "Finish" again). Two things make that safe:
+//   - profiles is upserted on the `user_id` unique constraint instead of
+//     inserted, so a retry updates the same row instead of hitting 23505
+//     unique_violation (which previously left the user permanently wedged on
+//     onboarding for the rest of the session — a reload was the only way
+//     out, and it dumped them into the tabs with zero contacts).
+//   - contacts/history use delete-then-insert ("replace") semantics scoped
+//     to the profile, so a retry's insert is never blocked by rows a prior
+//     partial attempt already wrote, regardless of whether the user edited
+//     any fields between attempts.
 export async function submitOnboarding(input: OnboardingInput): Promise<string> {
   const photoUrl = await uploadProfilePhoto(input.userId, input.photoUri);
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .insert({
-      user_id: input.userId,
-      display_name: input.displayName,
-      role: input.role,
-      values: input.values,
-      bio: input.bio,
-      photo_url: photoUrl,
-    })
+    .upsert(
+      {
+        user_id: input.userId,
+        display_name: input.displayName,
+        role: input.role,
+        values: input.values,
+        bio: input.bio,
+        photo_url: photoUrl,
+      },
+      { onConflict: 'user_id' }
+    )
     .select('id')
     .single();
   if (profileError) throw profileError;
 
   const profileId = profile.id;
+
+  const { error: deleteContactsError } = await supabase
+    .from('profile_contacts')
+    .delete()
+    .eq('profile_id', profileId);
+  if (deleteContactsError) throw deleteContactsError;
 
   if (input.contacts.length > 0) {
     const { error } = await supabase
@@ -89,6 +110,12 @@ export async function submitOnboarding(input: OnboardingInput): Promise<string> 
       .insert(input.contacts.map((c) => ({ profile_id: profileId, platform: c.platform, handle: c.handle })));
     if (error) throw error;
   }
+
+  const { error: deleteHistoryError } = await supabase
+    .from('competition_history')
+    .delete()
+    .eq('profile_id', profileId);
+  if (deleteHistoryError) throw deleteHistoryError;
 
   if (input.history.length > 0) {
     const { error } = await supabase

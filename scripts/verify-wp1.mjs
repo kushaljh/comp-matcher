@@ -9,13 +9,19 @@
 // back, asserts a cross-user storage write is rejected by policy, then
 // deletes everything it created (storage objects + both users).
 //
+// Also covers the Fix pass regression (verifier finding F1): simulates the
+// partial-failure state a flaky retry can leave behind (profile row exists,
+// contacts/history rows don't) and asserts that re-running the same write
+// sequence converges cleanly instead of hitting 23505 unique_violation on
+// profiles.user_id.
+//
 // Usage: node scripts/verify-wp1.mjs   (run from the worktree root)
 // Needs (from .env at repo root, or the environment):
 //   EXPO_PUBLIC_SUPABASE_URL
 //   EXPO_PUBLIC_SUPABASE_ANON_KEY
 //   SUPABASE_SERVICE_ROLE_KEY   (server-only; bypasses RLS — used only to
 //                                 create/delete the throwaway users and to
-//                                 remove the uploaded storage object)
+//                                 remove the uploaded storage objects)
 // ============================================================================
 
 import { readFileSync } from 'node:fs';
@@ -68,9 +74,51 @@ function assert(condition, message) {
   }
 }
 
+// Mirrors features/auth/api.ts's submitOnboarding(): upload photo -> upsert
+// profile (onConflict: user_id) -> delete-then-insert contacts -> delete-
+// then-insert history. Kept in lockstep with that function so this script
+// actually exercises the fix, not just "an" onboarding write path.
+async function performOnboardingWrites(userId, { photoSuffix, displayName, role, values, bio, contacts, history }) {
+  const photoPath = `${userId}/avatar-verify-${photoSuffix}.png`;
+  const { error: uploadErr } = await anon.storage
+    .from('profile-photos')
+    .upload(photoPath, TINY_PNG, { contentType: 'image/png' });
+  if (uploadErr) throw uploadErr;
+  const { data: publicUrlData } = anon.storage.from('profile-photos').getPublicUrl(photoPath);
+
+  const { data: profile, error: profileErr } = await anon
+    .from('profiles')
+    .upsert(
+      { user_id: userId, display_name: displayName, role, values, bio, photo_url: publicUrlData.publicUrl },
+      { onConflict: 'user_id' }
+    )
+    .select('id')
+    .single();
+  if (profileErr) throw profileErr;
+  const profileId = profile.id;
+
+  const { error: delContactsErr } = await anon.from('profile_contacts').delete().eq('profile_id', profileId);
+  if (delContactsErr) throw delContactsErr;
+  if (contacts.length > 0) {
+    const { error } = await anon
+      .from('profile_contacts')
+      .insert(contacts.map((c) => ({ profile_id: profileId, ...c })));
+    if (error) throw error;
+  }
+
+  const { error: delHistoryErr } = await anon.from('competition_history').delete().eq('profile_id', profileId);
+  if (delHistoryErr) throw delHistoryErr;
+  if (history.length > 0) {
+    const { error } = await anon.from('competition_history').insert(history.map((h) => ({ profile_id: profileId, ...h })));
+    if (error) throw error;
+  }
+
+  return { profileId, photoPath, publicUrl: publicUrlData.publicUrl };
+}
+
 let userAId = null;
 let userBId = null;
-let uploadedPath = null;
+const uploadedPaths = [];
 
 try {
   // --- setup: two throwaway confirmed users ---------------------------------
@@ -97,48 +145,29 @@ try {
   assert(!signInErr, `sign in as user A with the anon client (${signInErr?.message ?? 'ok'})`);
   if (signInErr) throw new Error(signInErr.message);
 
-  // --- upload avatar into own storage folder (the UI's first onboarding step)
-  uploadedPath = `${userAId}/avatar-verify.png`;
-  const { error: uploadErr } = await anon.storage
-    .from('profile-photos')
-    .upload(uploadedPath, TINY_PNG, { contentType: 'image/png' });
-  assert(!uploadErr, `upload tiny PNG into own storage folder (${uploadErr?.message ?? 'ok'})`);
-
-  const { data: publicUrlData } = anon.storage.from('profile-photos').getPublicUrl(uploadedPath);
-  assert(!!publicUrlData?.publicUrl, 'get public URL for uploaded avatar');
-
-  // --- insert profile (with photo_url set from the upload) -------------------
-  const { data: profile, error: profileErr } = await anon
-    .from('profiles')
-    .insert({
-      user_id: userAId,
-      display_name: 'WP1 Verify User',
+  // --- full onboarding write flow (upload, profile, >=2 contacts, 1 history) --
+  let firstAttempt;
+  let firstErr = null;
+  try {
+    firstAttempt = await performOnboardingWrites(userAId, {
+      photoSuffix: 'first',
+      displayName: 'WP1 Verify User',
       role: 'leader',
       values: ['winning', 'yolo'],
       bio: 'Created by scripts/verify-wp1.mjs',
-      photo_url: publicUrlData?.publicUrl ?? null,
-    })
-    .select('id')
-    .single();
-  assert(!profileErr && !!profile, `insert profile row (${profileErr?.message ?? 'ok'})`);
-  const profileId = profile?.id;
-
-  // --- insert >=2 contacts -----------------------------------------------------
-  const { error: contactsErr } = await anon.from('profile_contacts').insert([
-    { profile_id: profileId, platform: 'instagram', handle: '@wp1verify' },
-    { profile_id: profileId, platform: 'email', handle: EMAIL_A },
-  ]);
-  assert(!contactsErr, `insert 2 contacts (${contactsErr?.message ?? 'ok'})`);
-
-  // --- insert 1 competition history row -----------------------------------------
-  const { error: historyErr } = await anon.from('competition_history').insert({
-    profile_id: profileId,
-    event_name: 'WP1 Verify Classic',
-    year: 2025,
-    contest_name: 'Strictly Verify',
-    placement: '1st',
-  });
-  assert(!historyErr, `insert 1 competition history row (${historyErr?.message ?? 'ok'})`);
+      contacts: [
+        { platform: 'instagram', handle: '@wp1verify' },
+        { platform: 'email', handle: EMAIL_A },
+      ],
+      history: [{ event_name: 'WP1 Verify Classic', year: 2025, contest_name: 'Strictly Verify', placement: '1st' }],
+    });
+  } catch (err) {
+    firstErr = err;
+  }
+  assert(!firstErr, `onboarding write flow completes: upload + profile upsert + contacts + history (${firstErr?.message ?? 'ok'})`);
+  if (firstErr) throw firstErr;
+  uploadedPaths.push(firstAttempt.photoPath);
+  const profileId = firstAttempt.profileId;
 
   // --- read back + assert (same shape the UI's useHasProfile / screens read) ---
   const { data: readProfile, error: readProfileErr } = await anon
@@ -149,7 +178,7 @@ try {
   assert(!readProfileErr && readProfile !== null, `read back own profile row (${readProfileErr?.message ?? 'ok'})`);
   assert(readProfile?.display_name === 'WP1 Verify User', 'profile.display_name round-trips');
   assert(readProfile?.role === 'leader', 'profile.role round-trips');
-  assert(readProfile?.photo_url === publicUrlData?.publicUrl, 'profile.photo_url round-trips');
+  assert(readProfile?.photo_url === firstAttempt.publicUrl, 'profile.photo_url round-trips');
 
   const { data: readContacts, error: readContactsErr } = await anon
     .from('profile_contacts')
@@ -166,6 +195,64 @@ try {
     `read back >=1 competition history row (got ${readHistory?.length ?? 0})`
   );
 
+  // --- regression (verifier finding F1): simulate a partial-failure state, --
+  // then assert a retry with full data converges instead of getting wedged --
+  // (23505 unique_violation on profiles.user_id) ------------------------------
+  const { error: stripContactsErr } = await anon.from('profile_contacts').delete().eq('profile_id', profileId);
+  const { error: stripHistoryErr } = await anon.from('competition_history').delete().eq('profile_id', profileId);
+  assert(
+    !stripContactsErr && !stripHistoryErr,
+    'simulate partial-failure state: strip contacts + history, keep the profile row'
+  );
+
+  const { data: strippedContacts } = await anon.from('profile_contacts').select('id').eq('profile_id', profileId);
+  const { data: strippedHistory } = await anon.from('competition_history').select('id').eq('profile_id', profileId);
+  assert(
+    (strippedContacts?.length ?? 0) === 0 && (strippedHistory?.length ?? 0) === 0,
+    'partial state confirmed: profile exists, zero contacts, zero history rows'
+  );
+
+  let retryAttempt;
+  let retryErr = null;
+  try {
+    retryAttempt = await performOnboardingWrites(userAId, {
+      photoSuffix: 'retry',
+      displayName: 'WP1 Verify User (retried)',
+      role: 'leader',
+      values: ['winning', 'yolo'],
+      bio: 'Retried after a simulated partial failure',
+      contacts: [
+        { platform: 'instagram', handle: '@wp1verify' },
+        { platform: 'whatsapp', handle: '+15550009999' },
+      ],
+      history: [{ event_name: 'WP1 Verify Classic', year: 2025, contest_name: 'Strictly Verify', placement: '1st' }],
+    });
+  } catch (err) {
+    retryErr = err;
+  }
+  assert(
+    !retryErr,
+    `retry with full data after simulated partial failure succeeds, no 23505 (${retryErr?.message ?? 'ok'})`
+  );
+  if (!retryErr) {
+    uploadedPaths.push(retryAttempt.photoPath);
+    assert(retryAttempt.profileId === profileId, 'retry upserts the SAME profile row (same id), not a duplicate');
+
+    const { data: finalProfile } = await anon
+      .from('profiles')
+      .select('display_name, photo_url')
+      .eq('id', profileId)
+      .maybeSingle();
+    assert(finalProfile?.display_name === 'WP1 Verify User (retried)', 'profile reflects the retried submit data');
+    assert(finalProfile?.photo_url === retryAttempt.publicUrl, 'photo_url reflects the retried upload');
+
+    const { data: finalContacts } = await anon.from('profile_contacts').select('platform, handle').eq('profile_id', profileId);
+    assert((finalContacts?.length ?? 0) >= 2, `retry converges with >=2 contacts (got ${finalContacts?.length ?? 0})`);
+
+    const { data: finalHistory } = await anon.from('competition_history').select('event_name').eq('profile_id', profileId);
+    assert((finalHistory?.length ?? 0) >= 1, `retry converges with >=1 history row (got ${finalHistory?.length ?? 0})`);
+  }
+
   // --- negative: uploading into a DIFFERENT user's folder must FAIL ------------
   const { error: crossUploadErr } = await anon.storage
     .from('profile-photos')
@@ -176,10 +263,10 @@ try {
   fail += 1;
 } finally {
   // --- cleanup: storage object(s) + both throwaway users ------------------------
-  if (uploadedPath) {
-    const { error } = await admin.storage.from('profile-photos').remove([uploadedPath]);
-    if (error) console.error(`cleanup: failed to remove ${uploadedPath}: ${error.message}`);
-    else console.log(`cleanup: removed storage object ${uploadedPath}`);
+  for (const path of uploadedPaths) {
+    const { error } = await admin.storage.from('profile-photos').remove([path]);
+    if (error) console.error(`cleanup: failed to remove ${path}: ${error.message}`);
+    else console.log(`cleanup: removed storage object ${path}`);
   }
   await anon.auth.signOut().catch(() => {});
   if (userAId) {

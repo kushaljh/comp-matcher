@@ -296,3 +296,181 @@ nothing to commit, working tree clean
 ```
 
 (captured after the commit below)
+
+---
+
+## Fix pass (post-merge, adversarial verifier findings)
+
+Context: WP1 merged into `main`; two confirmed issues came back from the
+verifier, both in WP1's territory. `git rebase main` was run in the worktree
+first (fast-forward only — WP1's own commits are already in `main`), then
+both fixes were made as new commits on `wp1-auth`.
+
+### Issue 1 (MAJOR, verifier finding F1): onboarding submit wasn't atomic
+
+**Bug.** `submitOnboarding` in `features/auth/api.ts` did a plain `insert`
+into `profiles`. If that insert succeeded but a later step (contacts insert,
+history insert) failed — a dropped connection is enough — the user was stuck:
+clicking "Finish" again re-ran the whole sequence, and the profile insert now
+hit `23505 unique_violation` on `profiles.user_id` (the column is `unique`).
+The wizard would show that raw error forever; the only way out was reloading
+the app, which let `AuthGate` see the already-created profile row and route
+straight into the tabs — with zero contacts ever having been saved.
+
+**Fix** (`features/auth/api.ts`, `submitOnboarding`):
+- `profiles` is now `.upsert(..., { onConflict: 'user_id' })` instead of
+  `.insert(...)`. A retry updates the SAME row (same `id`, preserving
+  `created_at` since it isn't in the payload) instead of colliding.
+- `profile_contacts` and `competition_history` are now delete-then-insert
+  ("replace") scoped to `profile_id`: delete all rows for this profile, then
+  insert the current submission's rows. This makes a retry idempotent
+  regardless of what a prior partial attempt left behind (nothing, some
+  contacts, all contacts, etc.) and regardless of whether the user edited any
+  fields between attempts — there's no unique-key collision to reason about
+  because the slate is wiped first.
+- Not changed: `uploadProfilePhoto` still names each upload
+  `avatar-${Date.now()}.jpg`, so a retry uploads a new photo object rather
+  than overwriting the previous attempt's. This can leave an orphaned photo
+  object in storage after a failed+retried submit, but it does not cause a
+  wedged or incorrect app state (only the latest upload's URL is ever
+  referenced by the profile row), so it's left as-is — fixing it wasn't part
+  of the reported issue and would be scope creep.
+- The onboarding screen itself (`app/(auth)/onboarding/index.tsx`) needed NO
+  changes: retries were already possible from the UI (the form doesn't clear
+  on a failed submit, and `submitting`/`submitError` reset in `finally`), the
+  bug was entirely inside `submitOnboarding`'s write sequence.
+
+**Regression test** (`scripts/verify-wp1.mjs`): added
+`performOnboardingWrites()`, a helper that mirrors `submitOnboarding`'s exact
+write sequence (upload -> upsert profile -> delete+insert contacts ->
+delete+insert history) so the script exercises the real fix, not a
+lookalike. After the normal full-flow assertions, the script now:
+1. Deletes user A's `profile_contacts` and `competition_history` rows
+   directly (simulating "profile exists, no contacts" — the partial-failure
+   state) and asserts both are confirmed empty.
+2. Re-runs `performOnboardingWrites()` for the SAME user with full data and
+   asserts it succeeds with no error (this is exactly where the old code
+   would have thrown `23505`).
+3. Asserts the retry reused the same `profile.id` (proof it upserted, not
+   duplicated), and that the final profile/contacts/history all reflect the
+   retried data.
+
+### Issue 2: stale, empty query cache surviving auth transitions
+
+**Bug (repro).** Sign in -> land on the Events tab -> "No upcoming events
+yet." even though 3 approved events exist; a manual page reload fixed it.
+Root cause: TanStack Query's cache is keyed independent of the session (e.g.
+`['events']`), has a 60s `staleTime` (`lib/queryClient.ts`, frozen, not
+changed), and `refetchOnWindowFocus: false`. Nothing in the app ever told the
+cache "the session changed, throw away what you have" — so a result cached
+under one auth context (including a transient empty/anon-scoped result from
+right around a sign-in) could still be served, untouched, after the user
+that owns the screen changed. The same gap is a privacy problem on a shared
+device: after sign-out, a previous user's cached personal data (matches,
+entries, profile fields) stayed in memory for whoever used the app next.
+
+**Fix** (`features/auth/SessionProvider.tsx`): imported the existing
+`queryClient` singleton from `lib/queryClient.ts` (not modified) and, inside
+the existing `onAuthStateChange` callback, call `queryClient.clear()` on:
+- `SIGNED_IN` — covers both a fresh sign-in and a `signUp` that returns a
+  session immediately (confirmation disabled).
+- `SIGNED_OUT` — this is the privacy fix: nothing from the outgoing session
+  survives in memory for the next user on the same device.
+- `TOKEN_REFRESHED` where the refreshed session's `user.id` differs from the
+  previously-tracked one (tracked via a `useRef`) — defensive, covers a
+  same-device user switch that happens to surface as a refresh rather than a
+  clean sign-out/sign-in pair. A same-user token refresh (the common case,
+  firing roughly hourly) does NOT clear the cache — there's no reason to
+  discard perfectly valid cached data just because the access token rotated.
+
+`queryClient.clear()` (full wipe) was used rather than
+`invalidateQueries()` (mark-stale-and-refetch-in-background) specifically
+because of the privacy requirement: invalidate would still leave the old
+data sitting in the cache object until a refetch resolves, which is exactly
+the residency window the sign-out fix needs to close.
+
+**Verification (live browser, `expo start --web`, real UI):**
+- Signed in as `leader1@fixture.test` (read-only — no writes/swipes as a
+  fixture user) -> landed on `/events` and it immediately showed all 3
+  seeded events (Camp Hollywood, California Balboa Classic, Balboa
+  Rendezvous) — not the empty state, confirming the fresh sign-in cache
+  clear.
+- Clicked the real "Sign out" button on the Profile tab (WP4's screen) ->
+  it fired a native `confirm()` dialog ("Sign out? You can sign back in any
+  time."); the automation environment auto-suppresses native dialogs
+  (returns `false`), so I stubbed `window.confirm` to return `true` via the
+  console purely to get past that prompt for testing (no source file was
+  touched for this) -> confirmed sign-out redirected to `/sign-in` and
+  `localStorage` was emptied.
+- Signed in as a DIFFERENT fixture user (`follower2@fixture.test`) in the
+  same tab immediately after -> Profile tab correctly showed follower2's own
+  data (Nova Novice, role Follower, Instagram/TikTok contacts, Strictly Lindy
+  history) with no trace of leader1's previously-cached profile — confirming
+  the sign-out cache clear actually closes the shared-device leak, not just
+  the sign-in-side symptom.
+
+### Re-verification after both fixes
+
+```
+$ npx tsc --noEmit
+(no output — zero errors)
+
+$ npx expo export --platform web
+...
+Static rendering is enabled. Learn more: https://docs.expo.dev/router/web/static-rendering/
+› Static routes (25):
+/ (index) ... /(auth)/sign-in ... /(auth)/onboarding ...
+Exported: dist
+```
+
+(`dist/` deleted again afterwards — gitignored, not needed beyond the export
+succeeding. The route count grew from 19 to 25 because the rebase onto
+`main` pulled in WP2/WP3/WP4's routes.)
+
+```
+$ node scripts/verify-wp1.mjs
+setup: created throwaway user A (wp1-verify-a-1785161027524@verify.test)
+setup: created throwaway user B (wp1-verify-b-1785161027524@verify.test)
+PASS: sign in as user A with the anon client (ok)
+PASS: onboarding write flow completes: upload + profile upsert + contacts + history (ok)
+PASS: read back own profile row (ok)
+PASS: profile.display_name round-trips
+PASS: profile.role round-trips
+PASS: profile.photo_url round-trips
+PASS: read back >=2 contacts (got 2)
+PASS: read back >=1 competition history row (got 1)
+PASS: simulate partial-failure state: strip contacts + history, keep the profile row
+PASS: partial state confirmed: profile exists, zero contacts, zero history rows
+PASS: retry with full data after simulated partial failure succeeds, no 23505 (ok)
+PASS: retry upserts the SAME profile row (same id), not a duplicate
+PASS: profile reflects the retried submit data
+PASS: photo_url reflects the retried upload
+PASS: retry converges with >=2 contacts (got 2)
+PASS: retry converges with >=1 history row (got 1)
+PASS: upload into a DIFFERENT user's storage folder is rejected by policy
+cleanup: removed storage object .../avatar-verify-first.png
+cleanup: removed storage object .../avatar-verify-retry.png
+cleanup: deleted throwaway user A
+cleanup: deleted throwaway user B
+
+17 passed, 0 failed.
+```
+
+### Files touched in this fix pass
+
+- `features/auth/api.ts` — `submitOnboarding` (Issue 1).
+- `features/auth/SessionProvider.tsx` — cache clearing on auth transitions
+  (Issue 2).
+- `scripts/verify-wp1.mjs` — regression test for Issue 1.
+- `.claude/logs/wp1-auth.md` — this section.
+
+No other owned or frozen files were touched. `lib/queryClient.ts` was
+imported from, never modified.
+
+### `git status` after the fix pass — clean
+
+```
+$ git status
+On branch wp1-auth
+nothing to commit, working tree clean
+```

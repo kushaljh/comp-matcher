@@ -6,6 +6,7 @@ import { colors, fontSizes, fontWeights, spacing } from '../../theme/tokens';
 import { formatDateRange } from '../events/format';
 import type { EventRow } from './api';
 import { useApproveEvent, useRejectEvent } from './hooks';
+import { ScanContestsSection } from './ScanContests';
 
 // Inline-confirm pattern for reject (matches features/events/ContestCard.tsx —
 // Alert.alert is a no-op on web, so destructive actions confirm via a local
@@ -61,6 +62,8 @@ export function PendingEventCard({ event }: { event: EventRow }) {
           ) : null}
         </View>
       ) : null}
+
+      {event.website_url ? <ScanContestsSection websiteUrl={event.website_url} /> : null}
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 

@@ -7,6 +7,7 @@ import type { Enums } from '../../lib/database.types';
 import { formatDateRange } from '../events/format';
 import type { ContestRow, EventRow } from './api';
 import { useAddContest, useAdminContestsForEvent, useDeleteContest } from './hooks';
+import { ScanContestsSection } from './ScanContests';
 
 const DIVISIONS = Constants.public.Enums.division;
 
@@ -141,6 +142,18 @@ export function ApprovedEventCard({ event }: { event: EventRow }) {
       ) : (
         <Button title="Add contest" variant="secondary" onPress={() => setAdding(true)} />
       )}
+
+      {event.website_url ? (
+        <ScanContestsSection
+          websiteUrl={event.website_url}
+          onPick={(s) => {
+            setName(s.name);
+            setDivisions(s.divisions);
+            setAdding(true);
+            setError(null);
+          }}
+        />
+      ) : null}
     </Card>
   );
 }

@@ -1,0 +1,167 @@
+# WP3 — Swipe Deck + Matching
+
+Owner: WP3 agent. Branch `wp3-swipe`, worktree `comp_matcher-wp3`.
+
+## Scope delivered
+
+The core product loop on the Swipe tab:
+
+- **Contest picker** (`app/(tabs)/swipe/index.tsx`): resolves the caller's profile
+  via `rpc('get_my_profile_id')`, loads their entries (embedded select
+  `entries -> contests -> events`), and renders a horizontal chip selector. No
+  profile / no entries → empty state with a "Browse events" button that
+  `router.push('/events')` (plain route string, no cross-feature import).
+- **Deck** for the selected contest via `rpc('get_deck', { p_contest_id })`
+  (server already filters opposite-role / same-division / un-swiped / un-matched).
+  A two-card stack (top + a scaled-back peek). Card face: photo (expo-image with
+  an initial-letter placeholder when `photo_url` is null), display name, division
+  chip, values chips, 3-line bio, and up to 3 competition-history rows with
+  placements. History for **every** deck profile is fetched in ONE query
+  (`competition_history … in(profileIds)`) and grouped by `profile_id`.
+- **Gestures + buttons share one code path.** `SwipeCard` exposes an imperative
+  `swipe(direction)` handle. Both the pan-gesture release past threshold (via
+  `runOnJS`) and the ✓/✗ buttons (via the ref) call the *same* `triggerSwipe`
+  function, which runs the identical fly-off `withTiming` animation and, on
+  completion, the identical `onSwiped(direction)` callback → `Deck.handleSwipe`.
+- **Swipe persistence**: optimistic card removal, then `insert into swipes`. On
+  failure the card is put back on top and an inline error banner appears. On a
+  LIKE, after the insert resolves, `matches` is queried for the canonical
+  (contest, ordered-pair) row — the DB trigger creates it in the same statement
+  on a mutual like — and if found the **"It's a match!"** overlay is shown (both
+  faces, copy that contacts are now visible in Matches, a "See matches" CTA →
+  `router.push('/matches')`, and "Keep swiping" to dismiss).
+- **Empty deck** state + refetch on contest change (query key) and on screen
+  focus (`useFocusEffect`). A swiped card never resurfaces (server filters it;
+  the client also removes it; local state re-seeds from the query only when the
+  data reference genuinely changes, so optimistic removals survive between
+  fetches but converge to server truth on refetch).
+
+## Key decisions
+
+- **Single animation path (acceptance criterion).** Rather than duplicate logic,
+  the fly-off is a JS-thread function `triggerSwipe(direction)` in
+  `features/swipe/SwipeCard.tsx` (lines ~45-53). Setting a shared value to
+  `withTiming(...)` from the JS thread is fully supported by Reanimated and is
+  more reliable on web than pushing the whole thing through the UI thread — which
+  matters because the buttons must work where web pan gestures are flaky. The
+  gesture's `onEnd` worklet decides direction then `runOnJS(triggerSwipe)(dir)`;
+  the buttons call `topCardRef.current.swipe(dir)` → `triggerSwipe`. One
+  animation, one `onSwiped`, one `handleSwipe`.
+- **Animation params**: fly-off `withTiming` 240 ms to ±1.6× card width; spring
+  back to centre on release below threshold; threshold = 28% of card width;
+  rotation interpolates translateX→[-8°,+8°]; LIKE/PASS badge opacity interpolates
+  from 0→threshold. Peek card is a static `scale(0.94) translateY(14)` behind the
+  top card.
+- **Deck data flow**: `get_deck` (RPC, security-invoker so RLS applies) → local
+  `stack` state in `Deck` seeded from the query and re-seeded only when the query
+  hands a new reference (TanStack structural sharing keeps it stable when the
+  result is unchanged). Buttons are guarded by a `busyRef` so spamming can't
+  double-fire a card that is still mid-fly-off.
+- **Match-check approach**: query the ordered pair directly
+  (`profile_a = min(me,target)`, `profile_b = max(...)`) with `maybeSingle()`.
+  The `AFTER INSERT` match trigger runs inside the swipe insert's statement, so
+  the row is present the moment the insert resolves — no polling/subscription
+  needed. RLS `matches_select` lets both members read it.
+- **Minor tightening**: `useDeck` uses `staleTime: 0` so a focus refetch always
+  re-checks the server (permanence of swipes). The screen shows the "No contests"
+  empty state for both the signed-out (`get_my_profile_id` → null) and
+  no-entries cases; building auth is out of WP3 scope.
+
+## Files
+
+Created:
+- `features/swipe/types.ts` — DB-derived shared types.
+- `features/swipe/data.ts` — TanStack Query hooks (`useMyProfileId`, `useMyFace`,
+  `useMyEntries`, `useDeck`, `useDeckHistory`) + write helpers (`insertSwipe`,
+  `findMatch`).
+- `features/swipe/Chip.tsx` — division / value pill.
+- `features/swipe/CardContent.tsx` — presentational card face.
+- `features/swipe/SwipeCard.tsx` — animated gesture card + imperative handle.
+- `features/swipe/ContestPicker.tsx` — contest chip selector.
+- `features/swipe/MatchOverlay.tsx` — "It's a match!" modal.
+- `features/swipe/Deck.tsx` — stack orchestration, buttons, swipe flow, overlay.
+- `scripts/verify-wp3.mjs` — live DB acceptance verification.
+
+Modified:
+- `app/(tabs)/swipe/index.tsx` — the screen (was the "coming soon" stub).
+
+## Verification output (verbatim)
+
+### 1. Typecheck + web export
+
+```
+$ npx tsc --noEmit
+(zero errors)
+
+$ npx expo export --platform web
+Web Bundled 41700ms … entry.js (1380 modules)
+› Static routes (11):
+/swipe (27KB)
+…
+Exported: dist
+```
+
+Static rendering executed `/swipe` (27KB) without throwing — the screen mounts
+(including the Reanimated/gesture-handler bundle) in its loading/empty state.
+
+### 2. Live DB verify — `node scripts/verify-wp3.mjs`
+
+```
+Using contest Strictly Balboa @ Balboa Rendezvous (b3333333-0000-4000-8000-000000000001)
+  divisions: novice, amateur, advanced, open
+
+PASS: B's deck contains A and D — deck=2 card(s)
+PASS: B's deck EXCLUDES C (wrong division)
+PASS: B's deck EXCLUDES B / same-role followers
+PASS: A can like B (own swipe accepted)
+PASS: no match row after only A liked
+PASS: B's deck STILL contains A (B hasn't swiped)
+PASS: B can like A (own swipe accepted)
+PASS: match row exists and BOTH A and B can select it
+PASS: B's deck now EXCLUDES A (swiped + matched)
+PASS: B can pass D (own swipe accepted)
+PASS: D gone from B's deck after pass
+PASS: get_deck permanence: D still absent on re-call (deck now empty)
+PASS: spoof rejected: B cannot insert a swipe as A's profile — new row violates row-level security policy for table "swipes"
+
+Cleaned up throwaway users.
+
+13/13 checks passed.
+VERIFY-WP3 PASSED
+```
+
+Throwaway users (`wp3-…@verify.test`) were created in Balboa Rendezvous /
+"Strictly Balboa" and deleted at the end (cleanup runs in `finally`;
+`auth.admin.deleteUser` cascades their profiles/entries/swipes/matches).
+
+## Criterion 3 — gesture/button single handler + web animation note
+
+- **Single handler**: `features/swipe/SwipeCard.tsx` — `triggerSwipe` (≈ line 45)
+  is the sole commit function. `useImperativeHandle(ref, () => ({ swipe:
+  triggerSwipe }))` (line 55) is what the buttons call
+  (`Deck.tsx` → `topCardRef.current?.swipe(direction)`); the gesture `onEnd`
+  worklet calls `runOnJS(triggerSwipe)(dir)` (≈ line 70). Both resolve into the
+  same `withTiming` fly-off and the same `onSwiped` → `Deck.handleSwipe`, which
+  performs the one persistence + match-check flow.
+- **Web animation behavior**: the fly-off/spring animations are driven by setting
+  Reanimated shared values from the JS thread, which on web run via Reanimated's
+  rAF-based shim — reliable regardless of pointer-gesture quirks. The pan gesture
+  itself uses react-native-gesture-handler's web pointer support (can be flaky on
+  web, per the brief), which is exactly why the ✓/✗ buttons exist and go through
+  the identical path. Interactive gesture behavior was not manually exercised in
+  this headless environment (no in-scope auth UI to reach a populated deck); it is
+  validated by a clean typecheck, a successful web export, and successful static
+  render of `/swipe`.
+
+## Open items
+
+- Auth UI is a different work package; the Swipe screen shows the "No contests"
+  empty state when signed out. Once auth + entry creation land, the populated
+  deck is reachable end-to-end (the live verify already exercises the full
+  DB/RLS flow the UI relies on).
+- Realtime match notifications are out of scope; the match is detected
+  synchronously right after the like insert.
+
+## Git
+
+Committed on `wp3-swipe`; `git status` clean after the final commit (see below).

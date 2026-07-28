@@ -118,7 +118,7 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View>
           <Text style={{ fontFamily: fonts.display, fontSize: fs(25), letterSpacing: 1.2, color: colors.ink }}>
-            How You Bill
+            Your Profile
           </Text>
           <Text style={{ fontFamily: fonts.body, fontSize: fs(14), color: colors.ink2, marginTop: 5 }}>
             This is the card the other side of the floor sees.
@@ -173,7 +173,7 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <TextField label="Billing name" value={displayName} onChangeText={setDisplayName} />
+          <TextField label="Name" value={displayName} onChangeText={setDisplayName} />
 
           <View style={styles.fieldGap}>
             <Text style={[monoLabel, { marginBottom: 6 }]}>Role · locked · division is per entry</Text>

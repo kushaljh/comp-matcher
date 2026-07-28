@@ -263,28 +263,37 @@ export type Database = {
       profiles: {
         Row: {
           bio: string | null
+          city: string | null
+          country: string | null
           created_at: string
           display_name: string
           id: string
           photo_url: string | null
+          state: string | null
           user_id: string
           values: string[]
         }
         Insert: {
           bio?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
           display_name: string
           id?: string
           photo_url?: string | null
+          state?: string | null
           user_id: string
           values?: string[]
         }
         Update: {
           bio?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
           display_name?: string
           id?: string
           photo_url?: string | null
+          state?: string | null
           user_id?: string
           values?: string[]
         }
@@ -355,6 +364,8 @@ export type Database = {
         Args: { p_entry_id: string }
         Returns: {
           bio: string | null
+          city: string | null
+          country: string | null
           display_name: string
           division: Database["public"]["Enums"]["division"]
           entry_id: string
@@ -362,6 +373,7 @@ export type Database = {
           photo_url: string | null
           profile_id: string
           role: Database["public"]["Enums"]["dance_role"]
+          state: string | null
           values: string[]
         }[]
       }

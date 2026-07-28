@@ -49,7 +49,14 @@ export function useMyProfile() {
 export function useUpdateProfile(profileId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (patch: { display_name: string; bio: string | null; values: string[] }) =>
+    mutationFn: (patch: {
+      display_name: string;
+      bio: string | null;
+      values: string[];
+      city: string | null;
+      state: string | null;
+      country: string | null;
+    }) =>
       updateProfile(profileId as string, patch),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile', 'my-profile', profileId] });

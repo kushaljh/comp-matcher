@@ -7,13 +7,16 @@
 
 import { Constants } from '../../lib/database.types';
 
+// Stored lowercase. ValuesField renders every chip uppercase, so casing here is
+// invisible in the UI — and existing rows are lowercase, so matching stays
+// consistent. Changing this list needs a backfill migration too: `values` is
+// free text, and ValuesField renders whatever is stored, not just what's here.
 export const VALUES = [
   'winning',
-  'social fun',
-  'yolo',
-  'exposure',
+  'competition exposure',
   'improving',
   'making friends',
+  'performing',
 ] as const;
 
 export type ValueTag = (typeof VALUES)[number];

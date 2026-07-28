@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PhotoLightbox } from '../../../features/shared/PhotoLightbox';
 import { useSignedPhotoUrl } from '../../../features/shared/photo';
+import { formatLocalScene } from '../../../features/shared/location';
 import { Screen } from '../../../theme/components';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { Chip, ContactLine } from '../../../features/matches/components';
@@ -76,6 +77,7 @@ export default function MatchDetailScreen() {
     .filter(Boolean)
     .join(' · ');
   const initial = otherProfile.displayName.trim().charAt(0).toUpperCase() || '?';
+  const localScene = formatLocalScene(otherProfile);
 
   return (
     <Screen style={styles.screen}>
@@ -163,6 +165,25 @@ export default function MatchDetailScreen() {
               contacts.map((c) => <ContactLine key={c.id} platform={c.platform} handle={c.handle} />)
             )}
           </View>
+
+          {localScene ? (
+            <View style={styles.section}>
+              <Text
+                style={{
+                  fontFamily: fonts.mono,
+                  fontSize: fs(9),
+                  letterSpacing: 1.6,
+                  textTransform: 'uppercase',
+                  color: colors.ink2,
+                }}
+              >
+                Local scene
+              </Text>
+              <Text style={{ fontFamily: fonts.body, fontSize: fs(15), color: colors.ink }}>
+                {localScene}
+              </Text>
+            </View>
+          ) : null}
 
           {otherProfile.values.length > 0 ? (
             <View style={styles.chipRow}>

@@ -44,7 +44,14 @@ export async function fetchMyProfile(profileId: string): Promise<Profile | null>
 
 export async function updateProfile(
   profileId: string,
-  patch: { display_name: string; bio: string | null; values: string[] }
+  patch: {
+    display_name: string;
+    bio: string | null;
+    values: string[];
+    city: string | null;
+    state: string | null;
+    country: string | null;
+  }
 ): Promise<void> {
   const { error } = await supabase.from('profiles').update(patch).eq('id', profileId);
   if (error) throw error;

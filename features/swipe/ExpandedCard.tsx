@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PhotoLightbox } from '../shared/PhotoLightbox';
 import { useTheme } from '../../theme/ThemeProvider';
+import { formatLocalScene } from '../shared/location';
 import { Monogram, ScrimRamp } from './CardContent';
 import { RiseIn } from './Decor';
 import { withAlpha } from './tint';
@@ -28,6 +29,9 @@ export function ExpandedCard({ card, history, roleLine, photoUri, onClose }: Exp
   const { colors, fonts, fs, radii } = useTheme();
   const initial = card.display_name.trim().charAt(0).toUpperCase() || '?';
   const [photoOpen, setPhotoOpen] = useState(false);
+  // Null when the dancer set none of city/state/country, so the whole block
+  // disappears rather than rendering an empty label.
+  const localScene = formatLocalScene(card);
 
   return (
     <RiseIn style={styles.host}>
@@ -75,6 +79,17 @@ export function ExpandedCard({ card, history, roleLine, photoUri, onClose }: Exp
           </View>
 
           <View style={styles.body}>
+            {localScene ? (
+              <View style={styles.block}>
+                <Text style={[styles.micro, { fontFamily: fonts.mono, fontSize: fs(9), color: colors.ink2 }]}>
+                  Local scene
+                </Text>
+                <Text style={{ fontFamily: fonts.body, fontSize: fs(14), lineHeight: fs(22), color: colors.ink }}>
+                  {localScene}
+                </Text>
+              </View>
+            ) : null}
+
             {card.bio ? (
               <Text style={{ fontFamily: fonts.body, fontSize: fs(15), lineHeight: fs(24), color: colors.ink }}>
                 {card.bio}

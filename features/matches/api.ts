@@ -38,6 +38,9 @@ export type MatchDetail = {
     role: Enums<'dance_role'>;
     bio: string | null;
     values: string[];
+    city: string | null;
+    state: string | null;
+    country: string | null;
   };
 };
 
@@ -84,6 +87,9 @@ type RawMatchListRow = {
 type RawProfileFull = RawProfileLite & {
   bio: string | null;
   values: string[];
+  city: string | null;
+  state: string | null;
+  country: string | null;
 };
 
 type RawMatchDetailRow = {
@@ -211,8 +217,8 @@ export async function fetchMatchDetail(
       profile_b,
       created_at,
       contest:contests(name, event:events(name)),
-      profile_a_data:profiles!matches_profile_a_fkey(id, display_name, photo_url, bio, values),
-      profile_b_data:profiles!matches_profile_b_fkey(id, display_name, photo_url, bio, values)
+      profile_a_data:profiles!matches_profile_a_fkey(id, display_name, photo_url, bio, values, city, state, country),
+      profile_b_data:profiles!matches_profile_b_fkey(id, display_name, photo_url, bio, values, city, state, country)
     `
     )
     .eq('id', matchId)
@@ -242,6 +248,9 @@ export async function fetchMatchDetail(
       role: otherRole(myRole),
       bio: other.bio,
       values: other.values ?? [],
+      city: other.city,
+      state: other.state,
+      country: other.country,
     },
   };
 }

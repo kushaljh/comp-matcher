@@ -102,7 +102,9 @@ export function CardContent({ card, roleLine, photoUri }: CardContentProps) {
               numberOfLines={1}
               style={[styles.roleLine, { fontFamily: fonts.mono, fontSize: fs(9), color: colors.brass }]}
             >
-              {roleLine}
+              {/* City only, not the full local scene — this line is already
+                  tight, and the expanded card carries the whole thing. */}
+              {card.city ? `${roleLine} · ${card.city}` : roleLine}
             </Text>
             <View style={[styles.rule, { backgroundColor: colors.cardLine }]} />
           </View>

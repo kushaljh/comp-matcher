@@ -72,6 +72,9 @@ export type OnboardingInput = {
   displayName: string;
   values: string[];
   bio: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
   contacts: OnboardingContact[];
   history: OnboardingHistoryRow[];
 };
@@ -117,6 +120,9 @@ export async function submitOnboarding(input: OnboardingInput): Promise<string> 
         display_name: input.displayName,
         values: input.values,
         bio: input.bio,
+        city: input.city,
+        state: input.state,
+        country: input.country,
         photo_url: photoPath,
       },
       { onConflict: 'user_id' }

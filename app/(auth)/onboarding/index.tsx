@@ -64,6 +64,9 @@ export default function OnboardingScreen() {
   const [displayName, setDisplayName] = useState('');
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
   const [bio, setBio] = useState('');
+  const [city, setCity] = useState('');
+  const [stateRegion, setStateRegion] = useState('');
+  const [country, setCountry] = useState('');
 
   const [contacts, setContacts] = useState<ContactDraft[]>([{ platform: 'instagram', handle: '' }]);
   const [history, setHistory] = useState<HistoryDraft[]>([]);
@@ -182,6 +185,9 @@ export default function OnboardingScreen() {
         displayName: displayName.trim(),
         values: selectedValues,
         bio: bio.trim() ? bio.trim() : null,
+        city: city.trim() || null,
+        state: stateRegion.trim() || null,
+        country: country.trim() || null,
         // Store the canonical form, not the raw text — the submit button is
         // already disabled while any row is invalid, so these all validate.
         contacts: filledContacts.map((c) => {
@@ -248,6 +254,15 @@ export default function OnboardingScreen() {
             numberOfLines={3}
             style={styles.bioInput}
           />
+
+          <Text style={sectionLabel}>Local scene (optional)</Text>
+          <Text style={caption}>
+            So a partner can see where you&apos;re based. Deliberately not required.
+          </Text>
+          <TextField label="City" value={city} onChangeText={setCity} />
+          {/* "State / region", not "State" — most countries don't have states. */}
+          <TextField label="State / region" value={stateRegion} onChangeText={setStateRegion} />
+          <TextField label="Country" value={country} onChangeText={setCountry} />
         </Card>
 
         <Card style={styles.card}>

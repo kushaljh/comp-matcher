@@ -38,12 +38,18 @@ export default function ProfileScreen() {
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
   const [values, setValues] = useState<string[]>([]);
+  const [city, setCity] = useState('');
+  const [stateRegion, setStateRegion] = useState('');
+  const [country, setCountry] = useState('');
 
   useEffect(() => {
     if (profile && !initialized) {
       setDisplayName(profile.display_name);
       setBio(profile.bio ?? '');
       setValues(profile.values);
+      setCity(profile.city ?? '');
+      setStateRegion(profile.state ?? '');
+      setCountry(profile.country ?? '');
       setInitialized(true);
     }
   }, [profile, initialized]);
@@ -79,7 +85,10 @@ export default function ProfileScreen() {
   const isDirty =
     displayName !== profile.display_name ||
     bio !== (profile.bio ?? '') ||
-    JSON.stringify(values) !== JSON.stringify(profile.values);
+    JSON.stringify(values) !== JSON.stringify(profile.values) ||
+    city !== (profile.city ?? '') ||
+    stateRegion !== (profile.state ?? '') ||
+    country !== (profile.country ?? '');
 
   const pickPhoto = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -101,6 +110,10 @@ export default function ProfileScreen() {
       display_name: displayName.trim(),
       bio: bio.trim() || null,
       values,
+      // All three are independently optional — blank means "not saying".
+      city: city.trim() || null,
+      state: stateRegion.trim() || null,
+      country: country.trim() || null,
     });
   };
 
@@ -183,6 +196,15 @@ export default function ProfileScreen() {
               numberOfLines={4}
               style={styles.bioInput}
             />
+          </View>
+
+          <View style={styles.fieldGap}>
+            <Text style={[monoLabel, { marginBottom: 6 }]}>Local scene · optional</Text>
+            <TextField label="City" value={city} onChangeText={setCity} />
+            {/* "State / region", not "State" — most countries don't have states,
+                and every part of this is optional. */}
+            <TextField label="State / region" value={stateRegion} onChangeText={setStateRegion} />
+            <TextField label="Country" value={country} onChangeText={setCountry} />
           </View>
 
           <Button

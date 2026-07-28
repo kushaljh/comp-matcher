@@ -12,6 +12,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.compmatcher.app",
       "adaptiveIcon": {
         "backgroundColor": "#150C0E",
         "foregroundImage": "./assets/android-icon-foreground.png",

@@ -54,6 +54,9 @@ function invalidateEntryCaches(queryClient: ReturnType<typeof useQueryClient>, c
   queryClient.invalidateQueries({ queryKey: ['profile', 'entries'] });
   queryClient.invalidateQueries({ queryKey: ['swipe', 'myEntries'] });
   queryClient.invalidateQueries({ queryKey: ['swipe', 'deck', contestId] });
+  // Withdrawing dissolves that contest's pairings (DB trigger) — the Dance
+  // Card must drop them too.
+  queryClient.invalidateQueries({ queryKey: ['matches'] });
 }
 
 // Division chips enter/change an entry directly (no separate join screen).

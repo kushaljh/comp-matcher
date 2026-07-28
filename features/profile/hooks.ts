@@ -177,6 +177,8 @@ export function useDeleteEntry(profileId: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ['entries', 'byContest', vars.contestId] });
       queryClient.invalidateQueries({ queryKey: ['swipe', 'myEntries'] });
       queryClient.invalidateQueries({ queryKey: ['swipe', 'deck', vars.contestId] });
+      // Withdrawing dissolves that contest's pairings (DB trigger).
+      queryClient.invalidateQueries({ queryKey: ['matches'] });
     },
   });
 }

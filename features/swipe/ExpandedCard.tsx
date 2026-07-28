@@ -3,7 +3,9 @@
 // liking or passing from here goes through the deck's one commit path.
 
 import { Image } from 'expo-image';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { PhotoLightbox } from '../shared/PhotoLightbox';
 import { useTheme } from '../../theme/ThemeProvider';
 import { Monogram, ScrimRamp } from './CardContent';
 import { RiseIn } from './Decor';
@@ -23,6 +25,7 @@ const PODIUM = /1st|2nd|3rd|finals/i;
 export function ExpandedCard({ card, history, roleLine, onClose }: ExpandedCardProps) {
   const { colors, fonts, fs, radii } = useTheme();
   const initial = card.display_name.trim().charAt(0).toUpperCase() || '?';
+  const [photoOpen, setPhotoOpen] = useState(false);
 
   return (
     <RiseIn style={styles.host}>
@@ -35,7 +38,14 @@ export function ExpandedCard({ card, history, roleLine, onClose }: ExpandedCardP
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
           <View style={[styles.photo, { backgroundColor: colors.photoBg }]}>
             {card.photo_url ? (
-              <Image source={{ uri: card.photo_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
+              <Pressable
+                accessibilityRole="imagebutton"
+                accessibilityLabel="View full photo"
+                onPress={() => setPhotoOpen(true)}
+                style={StyleSheet.absoluteFill}
+              >
+                <Image source={{ uri: card.photo_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
+              </Pressable>
             ) : (
               <Monogram initial={initial} size={96} />
             )}
@@ -88,7 +98,7 @@ export function ExpandedCard({ card, history, roleLine, onClose }: ExpandedCardP
                 <View>
                   {history.map((row) => (
                     <View key={row.id} style={[styles.historyRow, { borderTopColor: colors.line }]}>
-                      <Text style={{ fontFamily: fonts.deco, fontSize: fs(18), color: colors.brass, width: 46 }}>
+                      <Text numberOfLines={1} style={{ fontFamily: fonts.deco, fontSize: fs(18), color: colors.brass, minWidth: 46 }}>
                         {row.year}
                       </Text>
                       <View style={styles.historyMain}>
@@ -147,6 +157,7 @@ export function ExpandedCard({ card, history, roleLine, onClose }: ExpandedCardP
           </Pressable>
         </View>
       </View>
+      <PhotoLightbox uri={card.photo_url} visible={photoOpen} onClose={() => setPhotoOpen(false)} />
     </RiseIn>
   );
 }

@@ -10,7 +10,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFonts } from 'expo-font';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
-import { useColorScheme, View } from 'react-native';
+import { Platform, useColorScheme, View } from 'react-native';
 import { fontAssets, fonts, type Fonts } from './fonts';
 import { palettes, radii, type ResolvedMode, type ThemeColors, type ThemeRadii } from './palette';
 
@@ -81,6 +81,38 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // The design defaults to the dark room when the device has no preference.
   const resolvedMode: ResolvedMode =
     prefs.mode === 'system' ? (systemScheme === 'light' ? 'light' : 'dark') : prefs.mode;
+
+  // Web only: the design's thin brass scrollbars. RN has no scrollbar styling
+  // primitive, so inject the CSS globally and re-inject when the palette flips
+  // (the thumb colour follows the resolved theme's brass).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const brass = palettes[resolvedMode].brass;
+    const id = 'cm-scrollbars';
+    let tag = document.getElementById(id) as HTMLStyleElement | null;
+    if (!tag) {
+      tag = document.createElement('style');
+      tag.id = id;
+      document.head.appendChild(tag);
+    }
+    tag.textContent = `
+      * { scrollbar-width: thin; scrollbar-color: ${brass}6B transparent; }
+      *::-webkit-scrollbar { width: 9px; height: 9px; }
+      *::-webkit-scrollbar-track { background: transparent; }
+      *::-webkit-scrollbar-thumb {
+        background: ${brass}57;
+        border: 3px solid transparent;
+        background-clip: content-box;
+        border-radius: 999px;
+      }
+      *::-webkit-scrollbar-thumb:hover {
+        background: ${brass}B3;
+        border: 2px solid transparent;
+        background-clip: content-box;
+      }
+      *::-webkit-scrollbar-corner { background: transparent; }
+    `;
+  }, [resolvedMode]);
 
   const value = useMemo<ThemeValue>(
     () => ({

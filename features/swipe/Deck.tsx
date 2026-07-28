@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
+import { suppressMatchBanner } from '../live/matchLive';
 import { deckKey, deleteOwnPass, findMatch, insertSwipe, statsKey } from './data';
 import { Bulbs } from './Decor';
 import { ExpandedCard } from './ExpandedCard';
@@ -128,6 +129,9 @@ export function Deck({
           target: card.profile_id,
         });
         if (matched) {
+          // We show the full celebration ourselves — keep the global realtime
+          // banner from doubling up for this pair.
+          suppressMatchBanner(`${contestId}:${card.profile_id}`);
           setMatchedFace({ displayName: card.display_name, photoUrl: card.photo_url });
         }
       }

@@ -12,7 +12,8 @@ import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { ContactPlatform, DanceRole } from '../../../features/auth/api';
 import { submitOnboarding } from '../../../features/auth/api';
-import { CONTACT_PLATFORMS, DANCE_ROLES, PLATFORM_LABELS, VALUES } from '../../../features/auth/constants';
+import { CONTACT_PLATFORMS, DANCE_ROLES, PLATFORM_LABELS } from '../../../features/auth/constants';
+import { ValuesField } from '../../../features/auth/ValuesField';
 import { useSession } from '../../../features/auth/SessionProvider';
 import { hasProfileQueryKey } from '../../../features/auth/useHasProfile';
 import { Button, Card, Screen, TextField } from '../../../theme/components';
@@ -229,12 +230,8 @@ export default function OnboardingScreen() {
             Your role is fixed once set — you can&apos;t switch between leader and follower later.
           </Text>
 
-          <Text style={sectionLabel}>Values</Text>
-          <View style={styles.chipRow}>
-            {VALUES.map((v) => (
-              <Chip key={v} label={v} selected={selectedValues.includes(v)} onPress={() => toggleValue(v)} />
-            ))}
-          </View>
+          <Text style={sectionLabel}>Values (optional)</Text>
+          <ValuesField values={selectedValues} onChange={setSelectedValues} />
 
           <TextField
             label="Bio (optional)"

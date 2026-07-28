@@ -9,6 +9,7 @@
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { GestureResponderEvent, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MatchLiveBanner } from '../../features/live/matchLive';
 import { useTheme } from '../../theme/ThemeProvider';
 
 const NAV = [
@@ -221,6 +222,7 @@ export default function TabsLayout() {
           </Tabs>
         </View>
       </View>
+      <MatchLiveBanner />
     </View>
   );
 }

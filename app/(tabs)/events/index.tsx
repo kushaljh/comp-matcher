@@ -390,7 +390,7 @@ export default function EventsScreen() {
                                 confirmingContestId === contest.id ? (
                                   <View style={styles.confirmRow}>
                                     <Text style={{ fontFamily: fonts.body, fontSize: fs(13), color: colors.ink }}>
-                                      Withdraw from this contest?
+                                      Withdraw? Pairings from this contest dissolve on both dance cards.
                                     </Text>
                                     <Pressable
                                       onPress={() => handleWithdraw(contest.id)}

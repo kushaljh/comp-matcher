@@ -5,7 +5,9 @@
 // photos per profile (see the WP log for the full list of compromises).
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { PhotoLightbox } from '../../../features/shared/PhotoLightbox';
 import { Screen } from '../../../theme/components';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { Chip, ContactLine } from '../../../features/matches/components';
@@ -35,6 +37,7 @@ export default function MatchDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { colors, fonts, fs, radii } = useTheme();
+  const [photoOpen, setPhotoOpen] = useState(false);
   const { data: match, isLoading, isError, error } = useMatchDetail(id);
   const otherProfileId = match?.otherProfile.id;
 
@@ -71,7 +74,14 @@ export default function MatchDetailScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={[styles.photoHeader, { backgroundColor: colors.photoBg }]}>
           {otherProfile.photoUrl ? (
-            <Image source={{ uri: otherProfile.photoUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+            <Pressable
+              accessibilityRole="imagebutton"
+              accessibilityLabel="View full photo"
+              onPress={() => setPhotoOpen(true)}
+              style={StyleSheet.absoluteFill}
+            >
+              <Image source={{ uri: otherProfile.photoUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+            </Pressable>
           ) : (
             <View style={styles.monogramWrap}>
               <Text style={{ fontFamily: fonts.serif, fontSize: fs(56), color: 'rgba(246,241,231,0.34)' }}>
@@ -181,7 +191,7 @@ export default function MatchDetailScreen() {
             ) : (
               history.map((h) => (
                 <View key={h.id} style={[styles.historyRow, { borderTopColor: colors.line }]}>
-                  <Text style={{ fontFamily: fonts.deco, fontSize: fs(18), color: colors.brass, width: 46 }}>
+                  <Text numberOfLines={1} style={{ fontFamily: fonts.deco, fontSize: fs(18), color: colors.brass, minWidth: 46 }}>
                     {h.year}
                   </Text>
                   <View style={styles.historyText}>
@@ -218,6 +228,8 @@ export default function MatchDetailScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <PhotoLightbox uri={otherProfile.photoUrl} visible={photoOpen} onClose={() => setPhotoOpen(false)} />
 
       <View style={[styles.footer, { backgroundColor: colors.scrim, borderTopColor: colors.line }]}>
         <Text

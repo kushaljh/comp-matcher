@@ -20,7 +20,7 @@ export function EntriesSection({ profileId }: { profileId: string | undefined })
   const handleLeave = async (id: string, contestId: string, contestName: string, eventName: string) => {
     const confirmed = await confirmAsync(
       'Leave contest?',
-      `You'll leave "${contestName}" at ${eventName}. Any match made through this entry stays, but you won't appear in this contest's deck anymore.`,
+      `You'll leave "${contestName}" at ${eventName}. Pairings from this contest are dissolved on BOTH dance cards, and you won't appear in its deck anymore.`,
       'Leave'
     );
     if (confirmed) deleteEntry.mutate({ entryId: id, contestId });

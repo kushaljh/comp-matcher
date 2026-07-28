@@ -152,7 +152,7 @@ export function HistorySection({ profileId }: { profileId: string | undefined })
           />
         ) : (
           <View key={row.id} style={[styles.row, { borderTopColor: colors.line }]}>
-            <Text style={{ fontFamily: fonts.deco, fontSize: fs(18), color: colors.brass, width: 46 }}>
+            <Text numberOfLines={1} style={{ fontFamily: fonts.deco, fontSize: fs(18), color: colors.brass, minWidth: 46 }}>
               {row.year}
             </Text>
             <View style={styles.rowText}>

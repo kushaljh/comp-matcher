@@ -8,7 +8,7 @@ import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { queryClient } from '../../lib/queryClient';
-import { supabase } from '../../lib/supabase';
+import { startedInPasswordRecovery, supabase } from '../../lib/supabase';
 
 type SessionContextValue = {
   session: Session | null;
@@ -31,7 +31,11 @@ const SessionContext = createContext<SessionContextValue | undefined>(undefined)
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
-  const [recovering, setRecovering] = useState(false);
+  // Seeded from the URL captured at module load, NOT just from the
+  // PASSWORD_RECOVERY event: on web that event fires while supabase-js is being
+  // constructed, before this component exists to hear it. The listener below
+  // still matters for native, where the deep-link handler triggers it later.
+  const [recovering, setRecovering] = useState(startedInPasswordRecovery);
   // Tracks the user id the cache was last cleared for, so a same-user token
   // refresh (which fires every ~hour and is NOT an identity change) doesn't
   // trigger a needless clear.

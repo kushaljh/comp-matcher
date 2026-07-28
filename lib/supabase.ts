@@ -32,6 +32,27 @@ const auth =
         detectSessionInUrl: false,
       };
 
+/**
+ * Whether this page load began with a password-recovery link.
+ *
+ * MUST be evaluated BEFORE createClient below — module statements run top to
+ * bottom, which is the whole point of it living here.
+ *
+ * `detectSessionInUrl` consumes the fragment and clears the hash the moment the
+ * client is constructed, which happens at module load. React has not mounted
+ * yet, so SessionProvider's onAuthStateChange listener does not exist and never
+ * hears the PASSWORD_RECOVERY event; by the time it subscribes, the hash is
+ * gone and the recovery session is indistinguishable from an ordinary sign-in.
+ * That put a user who clicked a reset link straight into the tabs with nothing
+ * reset — verified against a real recovery link before this was added.
+ *
+ * Reading the hash here, one statement earlier, is what makes it observable.
+ */
+export const startedInPasswordRecovery =
+  Platform.OS === 'web' &&
+  typeof window !== 'undefined' &&
+  /(^|[#&])type=recovery(&|$)/.test(window.location.hash);
+
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth,
 });

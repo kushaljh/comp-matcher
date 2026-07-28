@@ -12,6 +12,9 @@ export type MatchListItem = {
   eventName: string;
   createdAt: string;
   division: Enums<'division'> | null;
+  /** The caller's role in this pairing; the other dancer's is the opposite. */
+  myRole: Enums<'dance_role'>;
+  otherRole: Enums<'dance_role'>;
   firstHandle: string | null;
   otherProfile: {
     id: string;
@@ -26,10 +29,12 @@ export type MatchDetail = {
   contestName: string;
   eventName: string;
   createdAt: string;
+  myRole: Enums<'dance_role'>;
   otherProfile: {
     id: string;
     displayName: string;
     photoUrl: string | null;
+    /** Role in THIS pairing — a dancer has no single role any more. */
     role: Enums<'dance_role'>;
     bio: string | null;
     values: string[];
@@ -68,6 +73,7 @@ type RawMatchListRow = {
   id: string;
   contest_id: string;
   profile_a: string;
+  profile_a_role: Enums<'dance_role'>;
   profile_b: string;
   created_at: string;
   contest: { id: string; name: string; event: { id: string; name: string } | null } | null;
@@ -76,7 +82,6 @@ type RawMatchListRow = {
 };
 
 type RawProfileFull = RawProfileLite & {
-  role: Enums<'dance_role'>;
   bio: string | null;
   values: string[];
 };
@@ -85,12 +90,16 @@ type RawMatchDetailRow = {
   id: string;
   contest_id: string;
   profile_a: string;
+  profile_a_role: Enums<'dance_role'>;
   profile_b: string;
   created_at: string;
   contest: { name: string; event: { name: string } | null } | null;
   profile_a_data: RawProfileFull | null;
   profile_b_data: RawProfileFull | null;
 };
+
+const otherRole = (r: Enums<'dance_role'>): Enums<'dance_role'> =>
+  r === 'leader' ? 'follower' : 'leader';
 
 export async function fetchMyProfileId(): Promise<string | null> {
   const { data, error } = await supabase.rpc('get_my_profile_id');
@@ -106,6 +115,7 @@ export async function fetchMatches(myProfileId: string): Promise<MatchListItem[]
       id,
       contest_id,
       profile_a,
+      profile_a_role,
       profile_b,
       created_at,
       contest:contests(id, name, event:events(id, name)),
@@ -121,21 +131,25 @@ export async function fetchMatches(myProfileId: string): Promise<MatchListItem[]
   const rows = (data ?? []) as unknown as RawMatchListRow[];
 
   // The division shown per row is the SHARED entry division (get_deck() only
-  // ever matches same-contest, same-division candidates — see
-  // supabase/migrations/20260727120300_functions.sql). One bulk query for all
+  // ever matches same-contest, same-division candidates). One bulk query for all
   // (contest_id, profile_id) pairs in the list beats N sequential lookups.
+  //
+  // The key includes ROLE: the other dancer may hold two entries in this
+  // contest, and only the one at the role of THIS pairing has the right
+  // division. Keying on (contest, profile) alone would let a leader entry's
+  // division overwrite the follower entry's, at random.
   const otherIds = rows.map((row) => (row.profile_a === myProfileId ? row.profile_b : row.profile_a));
   const contestIds = rows.map((row) => row.contest_id);
   const divisionByKey = new Map<string, Enums<'division'>>();
   if (rows.length > 0) {
     const { data: entryRows, error: entryErr } = await supabase
       .from('entries')
-      .select('contest_id, profile_id, division')
+      .select('contest_id, profile_id, division, role')
       .in('contest_id', contestIds)
       .in('profile_id', otherIds);
     if (entryErr) throw entryErr;
     for (const e of entryRows ?? []) {
-      divisionByKey.set(`${e.contest_id}::${e.profile_id}`, e.division);
+      divisionByKey.set(`${e.contest_id}::${e.profile_id}::${e.role}`, e.division);
     }
   }
 
@@ -158,6 +172,10 @@ export async function fetchMatches(myProfileId: string): Promise<MatchListItem[]
     const isA = row.profile_a === myProfileId;
     const other = isA ? row.profile_b_data : row.profile_a_data;
     const otherId = other?.id ?? '';
+    // profile_a_role is recorded from a's side, so being profile_b means the
+    // caller's role is the inverse of what the row stores.
+    const myRole = isA ? row.profile_a_role : otherRole(row.profile_a_role);
+    const theirRole = otherRole(myRole);
     return {
       id: row.id,
       contestId: row.contest_id,
@@ -165,7 +183,9 @@ export async function fetchMatches(myProfileId: string): Promise<MatchListItem[]
       eventId: row.contest?.event?.id ?? '',
       eventName: row.contest?.event?.name ?? 'Unknown event',
       createdAt: row.created_at,
-      division: divisionByKey.get(`${row.contest_id}::${otherId}`) ?? null,
+      division: divisionByKey.get(`${row.contest_id}::${otherId}::${theirRole}`) ?? null,
+      myRole,
+      otherRole: theirRole,
       firstHandle: firstHandleByProfile.get(otherId) ?? null,
       otherProfile: {
         id: otherId,
@@ -187,11 +207,12 @@ export async function fetchMatchDetail(
       id,
       contest_id,
       profile_a,
+      profile_a_role,
       profile_b,
       created_at,
       contest:contests(name, event:events(name)),
-      profile_a_data:profiles!matches_profile_a_fkey(id, display_name, photo_url, role, bio, values),
-      profile_b_data:profiles!matches_profile_b_fkey(id, display_name, photo_url, role, bio, values)
+      profile_a_data:profiles!matches_profile_a_fkey(id, display_name, photo_url, bio, values),
+      profile_b_data:profiles!matches_profile_b_fkey(id, display_name, photo_url, bio, values)
     `
     )
     .eq('id', matchId)
@@ -205,32 +226,40 @@ export async function fetchMatchDetail(
   const other = isA ? row.profile_b_data : row.profile_a_data;
   if (!other) return null;
 
+  const myRole = isA ? row.profile_a_role : otherRole(row.profile_a_role);
+
   return {
     id: row.id,
     contestId: row.contest_id,
     contestName: row.contest?.name ?? 'Unknown contest',
     eventName: row.contest?.event?.name ?? 'Unknown event',
     createdAt: row.created_at,
+    myRole,
     otherProfile: {
       id: other.id,
       displayName: other.display_name,
       photoUrl: other.photo_url,
-      role: other.role,
+      role: otherRole(myRole),
       bio: other.bio,
       values: other.values ?? [],
     },
   };
 }
 
+// Scoped by role as well as contest: the other dancer may hold a second entry
+// here at the opposite role, and this used to be a `.maybeSingle()` on
+// (profile, contest) — which now throws the moment that happens.
 export async function fetchOtherEntry(
   profileId: string,
-  contestId: string
+  contestId: string,
+  role: Enums<'dance_role'>
 ): Promise<OtherEntry | null> {
   const { data, error } = await supabase
     .from('entries')
     .select('division, note')
     .eq('profile_id', profileId)
     .eq('contest_id', contestId)
+    .eq('role', role)
     .maybeSingle();
   if (error) throw error;
   return data;

@@ -11,6 +11,7 @@ import { SwipeCard, type SwipeCardHandle } from './SwipeCard';
 import { withAlpha } from './tint';
 import type {
   CompetitionHistoryRow,
+  DanceRole,
   DeckCard,
   MatchFace,
   SwipeDirection,
@@ -20,10 +21,14 @@ import type {
 type DeckProps = {
   cards: DeckCard[];
   historyByProfile: Record<string, CompetitionHistoryRow[]>;
+  /** The caller's entry this deck belongs to — identifies the deck's cache. */
+  entryId: string;
   contestId: string;
   contestName: string;
   eventName: string;
   myProfileId: string;
+  /** The role the caller is competing as in THIS entry. */
+  myRole: DanceRole;
   myFace: MatchFace;
   /** "Follower · novice" for every card in this deck, or just the division. */
   roleLine: string;
@@ -40,10 +45,12 @@ const NOTICE_MS = 3600;
 export function Deck({
   cards,
   historyByProfile,
+  entryId,
   contestId,
   contestName,
   eventName,
   myProfileId,
+  myRole,
   myFace,
   roleLine,
   cardWidth,
@@ -118,20 +125,24 @@ export function Deck({
       await insertSwipe({
         contestId,
         swiperProfileId: myProfileId,
+        swiperRole: myRole,
         targetProfileId: card.profile_id,
         direction,
       });
-      queryClient.invalidateQueries({ queryKey: statsKey(contestId, myProfileId) });
+      queryClient.invalidateQueries({ queryKey: statsKey(contestId, myProfileId, myRole) });
       if (direction === 'like') {
         const matched = await findMatch({
           contestId,
           me: myProfileId,
+          myRole,
           target: card.profile_id,
         });
         if (matched) {
           // We show the full celebration ourselves — keep the global realtime
-          // banner from doubling up for this pair.
-          suppressMatchBanner(`${contestId}:${card.profile_id}`);
+          // banner from doubling up for this pair. The role is part of the key:
+          // the same two dancers can pair twice in one contest, once per role,
+          // and suppressing one must not swallow the other's banner.
+          suppressMatchBanner(`${contestId}:${card.profile_id}:${myRole}`);
           setMatchedFace({ displayName: card.display_name, photoUrl: card.photo_url });
         }
       }
@@ -180,18 +191,19 @@ export function Deck({
       await deleteOwnPass({
         contestId,
         swiperProfileId: myProfileId,
+        swiperRole: myRole,
         targetProfileId: last.card.profile_id,
       });
       // Mark the deck stale without pulling a fresh page right now: get_deck has
       // no ORDER BY, so an immediate refetch could drop the recovered card back
       // into the middle of the pile. The next screen focus reconciles.
-      queryClient.invalidateQueries({ queryKey: deckKey(contestId), refetchType: 'none' });
+      queryClient.invalidateQueries({ queryKey: deckKey(entryId), refetchType: 'none' });
     } catch {
       setStack((prev) => prev.filter((c) => c.profile_id !== last.card.profile_id));
       setUndoStack((prev) => [...prev, last]);
       setError('Could not take back that pass. Check your connection and try again.');
     }
-  }, [undoStack, contestId, myProfileId, queryClient, showNotice]);
+  }, [undoStack, entryId, contestId, myProfileId, myRole, queryClient, showNotice]);
 
   const top = stack[0];
   const lastAction = undoStack[undoStack.length - 1];

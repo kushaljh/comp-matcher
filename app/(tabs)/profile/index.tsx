@@ -20,10 +20,6 @@ import {
   useUploadPhoto,
 } from '../../../features/profile/hooks';
 
-const ROLE_LABELS: Record<string, string> = {
-  leader: 'Leader',
-  follower: 'Follower',
-};
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -152,7 +148,7 @@ export default function ProfileScreen() {
               </View>
             </Pressable>
             <View style={styles.photoText}>
-              <Text style={monoLabel}>Lead · portrait</Text>
+              <Text style={monoLabel}>Portrait</Text>
               <Pressable onPress={pickPhoto} disabled={uploadPhoto.isPending} style={{ marginTop: 6 }}>
                 <Text
                   style={{
@@ -174,18 +170,6 @@ export default function ProfileScreen() {
 
         <View style={styles.section}>
           <TextField label="Name" value={displayName} onChangeText={setDisplayName} />
-
-          <View style={styles.fieldGap}>
-            <Text style={[monoLabel, { marginBottom: 6 }]}>Role · locked · division is per entry</Text>
-            <View style={[styles.roleWell, { backgroundColor: colors.fieldBg, borderRadius: radii.rSm }]}>
-              <Text style={{ fontFamily: fonts.body, fontSize: fs(15), color: colors.ink2 }}>
-                {ROLE_LABELS[profile.role] ?? profile.role}
-              </Text>
-              <Text style={{ fontFamily: fonts.mono, fontSize: fs(9), letterSpacing: 1.4, color: colors.ink2 }}>
-                ONE PER ACCOUNT
-              </Text>
-            </View>
-          </View>
 
           <View style={styles.fieldGap}>
             <TextField
@@ -300,13 +284,6 @@ const styles = StyleSheet.create({
   },
   fieldGap: {
     marginTop: 4,
-  },
-  roleWell: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 11,
-    paddingHorizontal: 14,
   },
   bioInput: {
     minHeight: 90,

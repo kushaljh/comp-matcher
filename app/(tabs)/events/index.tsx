@@ -3,6 +3,11 @@
 // directly; there's no separate join screen. Division pool counts and "am I
 // entered" both come from features/events/hooks.ts's per-contest entries
 // queries (entries are readable by every authenticated user).
+//
+// A dancer may enter one contest TWICE, once as a leader and once as a
+// follower. The role chips pick which of those two entries the division chips
+// and the withdraw button act on; the pool counts show the OPPOSITE role, since
+// that is who the chosen role would actually be paired with.
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
@@ -36,6 +41,11 @@ const DIVISION_LABELS: Record<Enums<'division'>, string> = {
   open: 'Open',
 };
 
+type DanceRole = Enums<'dance_role'>;
+const ROLES: DanceRole[] = ['leader', 'follower'];
+const ROLE_LABELS: Record<DanceRole, string> = { leader: 'Lead', follower: 'Follow' };
+const otherRole = (r: DanceRole): DanceRole => (r === 'leader' ? 'follower' : 'leader');
+
 export default function EventsScreen() {
   const router = useRouter();
   const { colors, fonts, fs, radii } = useTheme();
@@ -68,14 +78,30 @@ export default function EventsScreen() {
   const [openEventId, setOpenEventId] = useState<string | null>(null);
   const [confirmingContestId, setConfirmingContestId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Which role's entry the chips act on, per contest. Unset means "whichever
+  // one they already hold, else lead" — resolved by roleFor() below so a dancer
+  // with a single follower entry doesn't open on an empty leader tab.
+  const [roleByContest, setRoleByContest] = useState<Record<string, DanceRole>>({});
 
   const joinMutation = useJoinContest();
   const updateDivisionMutation = useUpdateEntryDivision();
   const leaveMutation = useLeaveContest();
 
-  function myEntry(contestId: string) {
-    if (!profileId) return undefined;
-    return entriesByContest.get(contestId)?.find((e) => e.profile_id === profileId);
+  /** Every entry the caller holds in a contest — 0, 1, or 2 (one per role). */
+  function myEntries(contestId: string): EntryForCounts[] {
+    if (!profileId) return [];
+    return entriesByContest.get(contestId)?.filter((e) => e.profile_id === profileId) ?? [];
+  }
+
+  function roleFor(contestId: string): DanceRole {
+    const explicit = roleByContest[contestId];
+    if (explicit) return explicit;
+    const held = myEntries(contestId);
+    return held.length === 1 ? held[0].role : 'leader';
+  }
+
+  function myEntry(contestId: string, role: DanceRole) {
+    return myEntries(contestId).find((e) => e.role === role);
   }
 
   async function handleRefresh() {
@@ -90,17 +116,18 @@ export default function EventsScreen() {
 
   function handleChipPress(contestId: string, division: Enums<'division'>) {
     if (!profileId) return;
-    const existing = myEntry(contestId);
+    const role = roleFor(contestId);
+    const existing = myEntry(contestId, role);
     if (existing) {
       if (existing.division === division) return;
       updateDivisionMutation.mutate({ entryId: existing.id, contestId, division });
     } else {
-      joinMutation.mutate({ profileId, contestId, division });
+      joinMutation.mutate({ profileId, contestId, division, role });
     }
   }
 
   function handleWithdraw(contestId: string) {
-    const existing = myEntry(contestId);
+    const existing = myEntry(contestId, roleFor(contestId));
     if (!existing) return;
     leaveMutation.mutate({ entryId: existing.id, contestId });
     setConfirmingContestId(null);
@@ -174,7 +201,7 @@ export default function EventsScreen() {
           <View style={styles.list}>
             {events.map((event) => {
               const contests = contestsByEvent.get(event.id) ?? [];
-              const mine = contests.filter((c) => myEntry(c.id)).length;
+              const mine = contests.filter((c) => myEntries(c.id).length > 0).length;
               const open = openEventId === event.id;
               const dateBlock = formatEventDateBlock(event.start_date);
               const range = formatDateRangeShort(event.start_date, event.end_date);
@@ -282,18 +309,24 @@ export default function EventsScreen() {
                       ) : (
                         contests.map((contest, i) => {
                           const entries = entriesByContest.get(contest.id) ?? [];
-                          const entry = myEntry(contest.id);
+                          const role = roleFor(contest.id);
+                          const entry = myEntry(contest.id, role);
                           const div = entry?.division;
+                          // Who this role could actually pair with: the opposite
+                          // role only. Counting both would flatter the number
+                          // with dancers you will never be shown.
+                          const pool = entries.filter((e) => e.role === otherRole(role));
                           const poolCount = div
-                            ? entries.filter((e) => e.division === div).length
-                            : entries.length;
+                            ? pool.filter((e) => e.division === div).length
+                            : pool.length;
+                          const partnerWord = otherRole(role) === 'leader' ? 'leads' : 'follows';
                           const poolLine = div
                             ? poolCount
-                              ? `${poolCount} in ${div}`
-                              : `nobody in ${div} yet — you're early`
+                              ? `${poolCount} ${partnerWord} in ${div}`
+                              : `no ${partnerWord} in ${div} yet — you're early`
                             : poolCount
-                              ? `${poolCount} looking across divisions`
-                              : 'nobody yet';
+                              ? `${poolCount} ${partnerWord} across divisions`
+                              : `no ${partnerWord} yet`;
 
                           return (
                             <View
@@ -339,11 +372,71 @@ export default function EventsScreen() {
                                     marginRight: 2,
                                   }}
                                 >
+                                  Dancing as
+                                </Text>
+                                {ROLES.map((r) => {
+                                  const selected = role === r;
+                                  const held = !!myEntry(contest.id, r);
+                                  return (
+                                    <Pressable
+                                      key={r}
+                                      onPress={() =>
+                                        setRoleByContest((prev) => ({ ...prev, [contest.id]: r }))
+                                      }
+                                      accessibilityRole="button"
+                                      accessibilityState={{ selected }}
+                                      style={[
+                                        styles.chip,
+                                        {
+                                          borderRadius: radii.pill,
+                                          borderWidth: 1,
+                                          borderColor: selected ? colors.brass : colors.line,
+                                          backgroundColor: selected ? colors.brass : 'transparent',
+                                        },
+                                      ]}
+                                    >
+                                      <Text
+                                        style={{
+                                          fontFamily: fonts.condensedSemi,
+                                          fontSize: fs(11.5),
+                                          letterSpacing: 1.2,
+                                          textTransform: 'uppercase',
+                                          color: selected ? colors.bg : colors.ink2,
+                                        }}
+                                      >
+                                        {ROLE_LABELS[r]}
+                                      </Text>
+                                      {/* A dot marks a role already entered, so
+                                          both entries are visible at a glance. */}
+                                      {held ? (
+                                        <View
+                                          style={[
+                                            styles.heldDot,
+                                            { backgroundColor: selected ? colors.bg : colors.brass },
+                                          ]}
+                                        />
+                                      ) : null}
+                                    </Pressable>
+                                  );
+                                })}
+                              </View>
+
+                              <View style={styles.divisionRow}>
+                                <Text
+                                  style={{
+                                    fontFamily: fonts.mono,
+                                    fontSize: fs(8.5),
+                                    letterSpacing: 1.6,
+                                    textTransform: 'uppercase',
+                                    color: colors.ink2,
+                                    marginRight: 2,
+                                  }}
+                                >
                                   Division
                                 </Text>
                                 {contest.divisions.map((d) => {
                                   const selected = div === d;
-                                  const count = entries.filter((e) => e.division === d).length;
+                                  const count = pool.filter((e) => e.division === d).length;
                                   const textColor = selected ? colors.bg : div ? colors.ink : colors.ink2;
                                   return (
                                     <Pressable
@@ -611,6 +704,15 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     paddingVertical: 5,
     paddingHorizontal: 12,
+  },
+  // alignSelf overrides the chip's baseline alignment — a bare View has no text
+  // baseline, so it would otherwise sit on the row's bottom edge.
+  heldDot: {
+    alignSelf: 'center',
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    marginLeft: 6,
   },
   actionsRow: {
     flexDirection: 'row',

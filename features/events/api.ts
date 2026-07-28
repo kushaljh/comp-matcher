@@ -83,27 +83,35 @@ export async function fetchMyProfileId(): Promise<string | null> {
   return data;
 }
 
-export async function fetchMyEntry(contestId: string, profileId: string): Promise<EntryRow | null> {
+// A dancer may hold up to two entries in one contest — one per role — so this
+// returns a list, ordered leader-first for a stable UI. It replaced a
+// `.maybeSingle()` lookup, which now throws the moment someone enters twice.
+export async function fetchMyEntries(
+  contestId: string,
+  profileId: string
+): Promise<EntryRow[]> {
   const { data, error } = await supabase
     .from('entries')
     .select('*')
     .eq('contest_id', contestId)
     .eq('profile_id', profileId)
-    .maybeSingle();
+    .order('role');
   if (error) throw error;
-  return data;
+  return data ?? [];
 }
 
 export async function joinContest(params: {
   profileId: string;
   contestId: string;
   division: Enums<'division'>;
+  role: Enums<'dance_role'>;
   note: string | null;
 }): Promise<void> {
   const { error } = await supabase.from('entries').insert({
     profile_id: params.profileId,
     contest_id: params.contestId,
     division: params.division,
+    role: params.role,
     note: params.note,
   });
   if (error) throw error;
@@ -125,13 +133,14 @@ export async function leaveContest(entryId: string): Promise<void> {
 export type EntryForCounts = {
   id: string;
   division: Enums<'division'>;
+  role: Enums<'dance_role'>;
   profile_id: string;
 };
 
 export async function fetchEntriesForContest(contestId: string): Promise<EntryForCounts[]> {
   const { data, error } = await supabase
     .from('entries')
-    .select('id, division, profile_id')
+    .select('id, division, role, profile_id')
     .eq('contest_id', contestId);
   if (error) throw error;
   return data ?? [];

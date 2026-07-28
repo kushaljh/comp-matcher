@@ -62,7 +62,7 @@ for (const [idx, d] of DEMO.entries()) {
   if (!prof) {
     const { data, error } = await admin
       .from('profiles')
-      .insert({ user_id: user.id, display_name: d.name, role: d.role, bio: d.bio, values: d.values })
+      .insert({ user_id: user.id, display_name: d.name, bio: d.bio, values: d.values })
       .select('id')
       .single();
     if (error) throw error;
@@ -83,8 +83,8 @@ for (const [idx, d] of DEMO.entries()) {
     const { error } = await admin
       .from('entries')
       .upsert(
-        { profile_id: prof.id, contest_id: c.id, division, note: 'Demo dancer — say hi!' },
-        { onConflict: 'profile_id,contest_id' }
+        { profile_id: prof.id, contest_id: c.id, division, role: d.role, note: 'Demo dancer — say hi!' },
+        { onConflict: 'profile_id,contest_id,role' }
       );
     if (error) throw error;
     entriesUpserted++;

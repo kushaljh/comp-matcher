@@ -4,6 +4,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import type {
   CompetitionHistoryRow,
+  DanceRole,
   DeckCard,
   MyEntry,
   MyProfileFace,
@@ -11,12 +12,17 @@ import type {
 
 // Query keys the deck mutates imperatively (swipe / undo), exported so the
 // invalidations stay in lock-step with the hooks below.
-export const deckKey = (contestId: string) => ['swipe', 'deck', contestId];
-export const statsKey = (contestId: string, profileId: string) => [
+//
+// Keyed on ENTRY, not contest: a dancer may hold two entries in one contest
+// (one per role), and those are two independent decks with separate swipe
+// histories. Keying on contestId would collapse them into one cache slot.
+export const deckKey = (entryId: string) => ['swipe', 'deck', entryId];
+export const statsKey = (contestId: string, profileId: string, role: DanceRole) => [
   'swipe',
   'stats',
   contestId,
   profileId,
+  role,
 ];
 
 // ---------------------------------------------------------------------------
@@ -34,9 +40,8 @@ export function useMyProfileId() {
 }
 
 // ---------------------------------------------------------------------------
-// The caller's own face + role. The role is what lets a card say
-// "Follower · novice": get_deck only ever returns the opposite role, so the
-// candidates' role is simply the other one.
+// The caller's own face. Role used to live here, but a dancer no longer HAS a
+// role — each entry does — so the role now travels with the selected entry.
 // ---------------------------------------------------------------------------
 export function useMyFace(profileId: string | null | undefined) {
   return useQuery({
@@ -45,17 +50,18 @@ export function useMyFace(profileId: string | null | undefined) {
     queryFn: async (): Promise<MyProfileFace> => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('display_name, photo_url, role')
+        .select('display_name, photo_url')
         .eq('id', profileId!)
         .single();
       if (error) throw error;
-      return { displayName: data.display_name, photoUrl: data.photo_url, role: data.role };
+      return { displayName: data.display_name, photoUrl: data.photo_url };
     },
   });
 }
 
 // ---------------------------------------------------------------------------
-// The caller's contest entries, flattened for the picker.
+// The caller's contest entries, flattened for the picker. A dancer entered in
+// one contest as BOTH roles gets two rows here — two stubs, two decks.
 // ---------------------------------------------------------------------------
 export function useMyEntries(profileId: string | null | undefined) {
   return useQuery({
@@ -64,7 +70,7 @@ export function useMyEntries(profileId: string | null | undefined) {
     queryFn: async (): Promise<MyEntry[]> => {
       const { data, error } = await supabase
         .from('entries')
-        .select('id, division, contest_id, contests!inner(name, events!inner(name))')
+        .select('id, division, role, contest_id, contests!inner(name, events!inner(name))')
         .eq('profile_id', profileId!)
         .order('created_at', { ascending: true });
       if (error) throw error;
@@ -72,6 +78,7 @@ export function useMyEntries(profileId: string | null | undefined) {
         entryId: row.id,
         contestId: row.contest_id,
         division: row.division,
+        role: row.role,
         contestName: row.contests.name,
         eventName: row.contests.events.name,
       }));
@@ -80,32 +87,33 @@ export function useMyEntries(profileId: string | null | undefined) {
 }
 
 // ---------------------------------------------------------------------------
-// The swipeable deck for a contest (server-filtered by role/division/history).
+// The swipeable deck for ONE entry (server-filtered by role/division/history).
+// The entry id — not the contest id — is what identifies a deck now.
 // ---------------------------------------------------------------------------
-async function fetchDeck(contestId: string): Promise<DeckCard[]> {
-  const { data, error } = await supabase.rpc('get_deck', { p_contest_id: contestId });
+async function fetchDeck(entryId: string): Promise<DeckCard[]> {
+  const { data, error } = await supabase.rpc('get_deck', { p_entry_id: entryId });
   if (error) throw error;
   return data ?? [];
 }
 
-export function useDeck(contestId: string | null | undefined) {
+export function useDeck(entryId: string | null | undefined) {
   return useQuery({
-    queryKey: deckKey(contestId ?? ''),
-    enabled: !!contestId,
-    // Always fetch fresh candidates when we ask (contest change / screen focus).
+    queryKey: deckKey(entryId ?? ''),
+    enabled: !!entryId,
+    // Always fetch fresh candidates when we ask (entry change / screen focus).
     staleTime: 0,
-    queryFn: () => fetchDeck(contestId!),
+    queryFn: () => fetchDeck(entryId!),
   });
 }
 
 // ---------------------------------------------------------------------------
 // "N on the floor" for every ticket stub. Deliberately shares useDeck's cache
-// key, so the stubs cost one RPC per entered contest and selecting a stub is
-// then an instant cache hit rather than a second fetch.
+// key, so the stubs cost one RPC per entry and selecting a stub is then an
+// instant cache hit rather than a second fetch.
 // ---------------------------------------------------------------------------
-export function useDeckCounts(contestIds: string[]): Record<string, number> {
+export function useDeckCounts(entryIds: string[]): Record<string, number> {
   return useQueries({
-    queries: contestIds.map((id) => ({
+    queries: entryIds.map((id) => ({
       queryKey: deckKey(id),
       staleTime: 0,
       queryFn: () => fetchDeck(id),
@@ -113,7 +121,7 @@ export function useDeckCounts(contestIds: string[]): Record<string, number> {
     combine: (results) => {
       const counts: Record<string, number> = {};
       results.forEach((r, i) => {
-        if (r.data) counts[contestIds[i]] = r.data.length;
+        if (r.data) counts[entryIds[i]] = r.data.length;
       });
       return counts;
     },
@@ -125,27 +133,38 @@ export function useDeckCounts(contestIds: string[]): Record<string, number> {
 // and how many pairings came back. Both are RLS-scoped to the caller already;
 // the explicit filters just make that visible at the call site.
 // ---------------------------------------------------------------------------
+// Both tallies are scoped to the ROLE being danced, not just the contest —
+// otherwise a dancer entered in both roles would see their leader and follower
+// numbers added together on whichever stub happened to be selected.
 export function useContestStats(
   contestId: string | null | undefined,
   profileId: string | null | undefined,
+  role: DanceRole | null | undefined,
   enabled: boolean
 ) {
   return useQuery({
-    queryKey: statsKey(contestId ?? '', profileId ?? ''),
-    enabled: enabled && !!contestId && !!profileId,
+    queryKey: statsKey(contestId ?? '', profileId ?? '', role ?? 'leader'),
+    enabled: enabled && !!contestId && !!profileId && !!role,
     queryFn: async (): Promise<{ asked: number; paired: number }> => {
       const asked = await supabase
         .from('swipes')
         .select('id', { count: 'exact', head: true })
         .eq('contest_id', contestId!)
         .eq('swiper_profile_id', profileId!)
+        .eq('swiper_role', role!)
         .eq('direction', 'like');
       if (asked.error) throw asked.error;
+      // profile_a_role is stored from a's side, so being profile_b means the
+      // caller's role is the inverse of what the row records.
+      const other: DanceRole = role === 'leader' ? 'follower' : 'leader';
       const paired = await supabase
         .from('matches')
         .select('id', { count: 'exact', head: true })
         .eq('contest_id', contestId!)
-        .or(`profile_a.eq.${profileId},profile_b.eq.${profileId}`);
+        .or(
+          `and(profile_a.eq.${profileId},profile_a_role.eq.${role}),` +
+            `and(profile_b.eq.${profileId},profile_a_role.eq.${other})`
+        );
       if (paired.error) throw paired.error;
       return { asked: asked.count ?? 0, paired: paired.count ?? 0 };
     },
@@ -184,15 +203,19 @@ export function useDeckHistory(profileIds: string[]) {
 // ---------------------------------------------------------------------------
 
 // Persist a swipe. Throws on failure so the caller can roll the card back.
+// `myRole` is the role the caller is competing as — the swipes_insert policy
+// checks they actually hold an entry at that role.
 export async function insertSwipe(input: {
   contestId: string;
   swiperProfileId: string;
+  swiperRole: DanceRole;
   targetProfileId: string;
   direction: 'like' | 'pass';
 }): Promise<void> {
   const { error } = await supabase.from('swipes').insert({
     contest_id: input.contestId,
     swiper_profile_id: input.swiperProfileId,
+    swiper_role: input.swiperRole,
     target_profile_id: input.targetProfileId,
     direction: input.direction,
   });
@@ -201,10 +224,12 @@ export async function insertSwipe(input: {
 
 // Take back a pass. The `swipes_delete_own_pass` policy allows exactly this and
 // nothing else: your own row, direction 'pass'. The direction filter is repeated
-// client-side so a stale undo stack can never aim this at a like.
+// client-side so a stale undo stack can never aim this at a like; the role
+// filter keeps an undo on one deck from clearing the other deck's pass.
 export async function deleteOwnPass(input: {
   contestId: string;
   swiperProfileId: string;
+  swiperRole: DanceRole;
   targetProfileId: string;
 }): Promise<void> {
   const { error } = await supabase
@@ -212,26 +237,36 @@ export async function deleteOwnPass(input: {
     .delete()
     .eq('contest_id', input.contestId)
     .eq('swiper_profile_id', input.swiperProfileId)
+    .eq('swiper_role', input.swiperRole)
     .eq('target_profile_id', input.targetProfileId)
     .eq('direction', 'pass');
   if (error) throw error;
 }
 
 // After a like, the DB trigger has already created the match row (same txn) if
-// the target liked back. Look it up by the canonically-ordered pair.
+// the target liked back. Look it up by the canonically-ordered pair plus the
+// role — the same two dancers can hold a second, separate match in this contest
+// with the roles reversed.
 export async function findMatch(input: {
   contestId: string;
   me: string;
+  myRole: DanceRole;
   target: string;
 }): Promise<boolean> {
-  const [profileA, profileB] =
-    input.me < input.target ? [input.me, input.target] : [input.target, input.me];
+  const iAmA = input.me < input.target;
+  const [profileA, profileB] = iAmA ? [input.me, input.target] : [input.target, input.me];
+  const aRole: DanceRole = iAmA
+    ? input.myRole
+    : input.myRole === 'leader'
+      ? 'follower'
+      : 'leader';
   const { data, error } = await supabase
     .from('matches')
     .select('id')
     .eq('contest_id', input.contestId)
     .eq('profile_a', profileA)
     .eq('profile_b', profileB)
+    .eq('profile_a_role', aRole)
     .maybeSingle();
   if (error) throw error;
   return !!data;

@@ -53,7 +53,10 @@ function invalidateEntryCaches(queryClient: ReturnType<typeof useQueryClient>, c
   queryClient.invalidateQueries({ queryKey: ['entries', 'byContest', contestId] });
   queryClient.invalidateQueries({ queryKey: ['profile', 'entries'] });
   queryClient.invalidateQueries({ queryKey: ['swipe', 'myEntries'] });
-  queryClient.invalidateQueries({ queryKey: ['swipe', 'deck', contestId] });
+  // Deck caches are keyed by ENTRY id now, and one contest change can affect
+  // either of the caller's two entries there — so invalidate the whole prefix
+  // rather than trying to name the affected entry ids.
+  queryClient.invalidateQueries({ queryKey: ['swipe', 'deck'] });
   // Withdrawing dissolves that contest's pairings (DB trigger) — the Dance
   // Card must drop them too.
   queryClient.invalidateQueries({ queryKey: ['matches'] });
@@ -64,8 +67,19 @@ function invalidateEntryCaches(queryClient: ReturnType<typeof useQueryClient>, c
 export function useJoinContest() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { profileId: string; contestId: string; division: Enums<'division'> }) =>
-      api.joinContest({ profileId: vars.profileId, contestId: vars.contestId, division: vars.division, note: null }),
+    mutationFn: (vars: {
+      profileId: string;
+      contestId: string;
+      division: Enums<'division'>;
+      role: Enums<'dance_role'>;
+    }) =>
+      api.joinContest({
+        profileId: vars.profileId,
+        contestId: vars.contestId,
+        division: vars.division,
+        role: vars.role,
+        note: null,
+      }),
     // Refetch on settle (success OR error) — a 23505 unique-violation race means
     // someone/something already created the row, so the true state after any
     // outcome is "check what's there now" rather than trusting local state.

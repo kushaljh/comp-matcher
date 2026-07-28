@@ -53,7 +53,6 @@ export type OnboardingInput = {
   userId: string;
   photoUri: string;
   displayName: string;
-  role: DanceRole;
   values: string[];
   bio: string | null;
   contacts: OnboardingContact[];
@@ -98,7 +97,6 @@ export async function submitOnboarding(input: OnboardingInput): Promise<string> 
       {
         user_id: input.userId,
         display_name: input.displayName,
-        role: input.role,
         values: input.values,
         bio: input.bio,
         photo_url: photoUrl,

@@ -14,7 +14,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../theme/ThemeProvider';
 
-// pair key = `${contestId}:${otherProfileId}`
+// pair key = `${contestId}:${otherProfileId}:${myRoleInThatPairing}`
+//
+// The role is part of the key because two dancers can now pair TWICE in one
+// contest — once leading, once following. Without it, the Deck suppressing its
+// own celebration for one pairing would also swallow the banner for the other.
 const suppressed = new Set<string>();
 
 /** Called by the Deck right before it shows its own match celebration. */
@@ -52,13 +56,22 @@ export function MatchLiveBanner() {
       id: string;
       contest_id: string;
       profile_a: string;
+      profile_a_role: 'leader' | 'follower';
       profile_b: string;
     }) => {
       // Whatever else happens, the Dance Card must reflect the new match.
       queryClient.invalidateQueries({ queryKey: ['matches'] });
 
-      const other = row.profile_a === profileId ? row.profile_b : row.profile_a;
-      if (suppressed.has(`${row.contest_id}:${other}`)) return;
+      const isA = row.profile_a === profileId;
+      const other = isA ? row.profile_b : row.profile_a;
+      // profile_a_role is stored from a's side, so being profile_b means my
+      // role is the inverse of what the row records.
+      const myRole = isA
+        ? row.profile_a_role
+        : row.profile_a_role === 'leader'
+          ? 'follower'
+          : 'leader';
+      if (suppressed.has(`${row.contest_id}:${other}:${myRole}`)) return;
 
       const { data } = await supabase
         .from('profiles')

@@ -10,9 +10,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { ContactPlatform, DanceRole } from '../../../features/auth/api';
+import type { ContactPlatform } from '../../../features/auth/api';
 import { submitOnboarding } from '../../../features/auth/api';
-import { CONTACT_PLATFORMS, DANCE_ROLES, PLATFORM_LABELS } from '../../../features/auth/constants';
+import { CONTACT_PLATFORMS, PLATFORM_LABELS } from '../../../features/auth/constants';
 import { ValuesField } from '../../../features/auth/ValuesField';
 import { useSession } from '../../../features/auth/SessionProvider';
 import { hasProfileQueryKey } from '../../../features/auth/useHasProfile';
@@ -61,7 +61,6 @@ export default function OnboardingScreen() {
   const [photoError, setPhotoError] = useState<string | null>(null);
 
   const [displayName, setDisplayName] = useState('');
-  const [role, setRole] = useState<DanceRole | null>(null);
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
   const [bio, setBio] = useState('');
 
@@ -120,13 +119,12 @@ export default function OnboardingScreen() {
   const missing: string[] = [];
   if (!photoUri) missing.push('a profile photo');
   if (!displayName.trim()) missing.push('a display name');
-  if (!role) missing.push('your role');
   if (filledContacts.length === 0) missing.push('at least one contact');
 
   const canSubmit = missing.length === 0 && !submitting;
 
   async function handleSubmit() {
-    if (!session || !photoUri || !role) return;
+    if (!session || !photoUri) return;
     setSubmitError(null);
 
     // A history row the user started filling must be complete (or emptied) —
@@ -172,7 +170,6 @@ export default function OnboardingScreen() {
         userId: session.user.id,
         photoUri,
         displayName: displayName.trim(),
-        role,
         values: selectedValues,
         bio: bio.trim() ? bio.trim() : null,
         contacts: filledContacts.map((c) => ({ platform: c.platform, handle: c.handle.trim() })),
@@ -220,14 +217,9 @@ export default function OnboardingScreen() {
         <Card style={styles.card}>
           <TextField label="Display name" value={displayName} onChangeText={setDisplayName} />
 
-          <Text style={sectionLabel}>Role</Text>
-          <View style={styles.chipRow}>
-            {DANCE_ROLES.map((r) => (
-              <Chip key={r} label={r} selected={role === r} onPress={() => setRole(r)} />
-            ))}
-          </View>
           <Text style={caption}>
-            Your role is fixed once set — you can&apos;t switch between leader and follower later.
+            You pick lead or follow when you enter each contest — not here. You can dance
+            either, and both in the same contest.
           </Text>
 
           <Text style={sectionLabel}>Values (optional)</Text>

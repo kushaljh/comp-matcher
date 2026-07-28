@@ -106,6 +106,7 @@ export type Database = {
           id: string
           note: string | null
           profile_id: string
+          role: Database["public"]["Enums"]["dance_role"]
         }
         Insert: {
           contest_id: string
@@ -114,6 +115,7 @@ export type Database = {
           id?: string
           note?: string | null
           profile_id: string
+          role: Database["public"]["Enums"]["dance_role"]
         }
         Update: {
           contest_id?: string
@@ -122,6 +124,7 @@ export type Database = {
           id?: string
           note?: string | null
           profile_id?: string
+          role?: Database["public"]["Enums"]["dance_role"]
         }
         Relationships: [
           {
@@ -185,6 +188,7 @@ export type Database = {
           created_at: string
           id: string
           profile_a: string
+          profile_a_role: Database["public"]["Enums"]["dance_role"]
           profile_b: string
         }
         Insert: {
@@ -192,6 +196,7 @@ export type Database = {
           created_at?: string
           id?: string
           profile_a: string
+          profile_a_role: Database["public"]["Enums"]["dance_role"]
           profile_b: string
         }
         Update: {
@@ -199,6 +204,7 @@ export type Database = {
           created_at?: string
           id?: string
           profile_a?: string
+          profile_a_role?: Database["public"]["Enums"]["dance_role"]
           profile_b?: string
         }
         Relationships: [
@@ -261,7 +267,6 @@ export type Database = {
           display_name: string
           id: string
           photo_url: string | null
-          role: Database["public"]["Enums"]["dance_role"]
           user_id: string
           values: string[]
         }
@@ -271,7 +276,6 @@ export type Database = {
           display_name: string
           id?: string
           photo_url?: string | null
-          role: Database["public"]["Enums"]["dance_role"]
           user_id: string
           values?: string[]
         }
@@ -281,7 +285,6 @@ export type Database = {
           display_name?: string
           id?: string
           photo_url?: string | null
-          role?: Database["public"]["Enums"]["dance_role"]
           user_id?: string
           values?: string[]
         }
@@ -294,6 +297,7 @@ export type Database = {
           direction: Database["public"]["Enums"]["swipe_direction"]
           id: string
           swiper_profile_id: string
+          swiper_role: Database["public"]["Enums"]["dance_role"]
           target_profile_id: string
         }
         Insert: {
@@ -302,6 +306,7 @@ export type Database = {
           direction: Database["public"]["Enums"]["swipe_direction"]
           id?: string
           swiper_profile_id: string
+          swiper_role: Database["public"]["Enums"]["dance_role"]
           target_profile_id: string
         }
         Update: {
@@ -310,6 +315,7 @@ export type Database = {
           direction?: Database["public"]["Enums"]["swipe_direction"]
           id?: string
           swiper_profile_id?: string
+          swiper_role?: Database["public"]["Enums"]["dance_role"]
           target_profile_id?: string
         }
         Relationships: [
@@ -346,7 +352,7 @@ export type Database = {
         Returns: undefined
       }
       get_deck: {
-        Args: { p_contest_id: string }
+        Args: { p_entry_id: string }
         Returns: {
           bio: string | null
           display_name: string
@@ -355,12 +361,17 @@ export type Database = {
           note: string | null
           photo_url: string | null
           profile_id: string
+          role: Database["public"]["Enums"]["dance_role"]
           values: string[]
         }[]
       }
       get_my_profile_id: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      other_role: {
+        Args: { r: Database["public"]["Enums"]["dance_role"] }
+        Returns: Database["public"]["Enums"]["dance_role"]
       }
     }
     Enums: {

@@ -64,7 +64,7 @@ async function createVerifyUser(label, role) {
 
   const { data: prof, error: pErr } = await admin
     .from('profiles')
-    .insert({ user_id: data.user.id, display_name: `WP2 Verify ${label}`, role })
+    .insert({ user_id: data.user.id, display_name: `WP2 Verify ${label}` })
     .select('id')
     .single();
   if (pErr) throw new Error(`profile insert (${label}): ${pErr.message}`);
@@ -75,7 +75,9 @@ async function createVerifyUser(label, role) {
   const { error: signErr } = await client.auth.signInWithPassword({ email, password: PASSWORD });
   if (signErr) throw new Error(`sign-in (${label}): ${signErr.message}`);
 
-  return { label, email, userId: data.user.id, profileId: prof.id, client };
+  // `role` is carried on the returned handle (not the profile row) because it
+  // now belongs to each entry this user creates.
+  return { label, email, role, userId: data.user.id, profileId: prof.id, client };
 }
 
 async function main() {
@@ -150,6 +152,7 @@ async function main() {
     profile_id: userA.profileId,
     contest_id: targetContest.id,
     division: validDivision,
+    role: userA.role,
     note: 'wp2 verify note',
   });
   if (joinErr) {
@@ -163,6 +166,7 @@ async function main() {
     profile_id: userA.profileId,
     contest_id: targetContest.id,
     division: validDivision,
+    role: userA.role,
     note: 'dup attempt',
   });
   if (dupErr?.code === '23505') {
@@ -179,6 +183,7 @@ async function main() {
       profile_id: userB.profileId,
       contest_id: targetContest.id,
       division: invalidDivision,
+      role: userB.role,
       note: null,
     });
     if (badDivErr) {

@@ -135,7 +135,7 @@ async function upsertFixture(f) {
   const { data: prof, error: pErr } = await supabase
     .from('profiles')
     .upsert(
-      { user_id: userId, display_name: f.display_name, role: f.role, bio: f.bio, values: f.values },
+      { user_id: userId, display_name: f.display_name, bio: f.bio, values: f.values },
       { onConflict: 'user_id' },
     )
     .select('id')
@@ -160,12 +160,19 @@ async function upsertFixture(f) {
     .insert(f.history.map((h) => ({ profile_id: profileId, ...h })));
   if (hErr) throw hErr;
 
-  // entry (unique per profile+contest) — validated against contest divisions by trigger
+  // entry (unique per profile+contest+role) — role lives here now, not on the
+  // profile; divisions are validated against the contest by trigger
   const { error: eErr } = await supabase
     .from('entries')
     .upsert(
-      { profile_id: profileId, contest_id: f.entry.contest_id, division: f.entry.division, note: f.entry.note },
-      { onConflict: 'profile_id,contest_id' },
+      {
+        profile_id: profileId,
+        contest_id: f.entry.contest_id,
+        division: f.entry.division,
+        role: f.role,
+        note: f.entry.note,
+      },
+      { onConflict: 'profile_id,contest_id,role' },
     );
   if (eErr) throw eErr;
 

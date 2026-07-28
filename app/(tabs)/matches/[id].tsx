@@ -41,7 +41,11 @@ export default function MatchDetailScreen() {
   const { data: match, isLoading, isError, error } = useMatchDetail(id);
   const otherProfileId = match?.otherProfile.id;
 
-  const { data: entry } = useOtherEntry(otherProfileId, match?.contestId);
+  const { data: entry } = useOtherEntry(
+    otherProfileId,
+    match?.contestId,
+    match?.otherProfile.role
+  );
   const { data: contacts, isLoading: contactsLoading } = useOtherContacts(otherProfileId);
   const { data: history, isLoading: historyLoading } = useOtherHistory(otherProfileId);
 

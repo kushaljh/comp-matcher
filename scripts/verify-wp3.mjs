@@ -87,16 +87,19 @@ async function signIn(email) {
   return c;
 }
 
-async function deckIds(client, contestId) {
-  const { data, error } = await client.rpc('get_deck', { p_contest_id: contestId });
+// get_deck takes an ENTRY id now — a contest id no longer identifies a deck,
+// since a dancer may hold one entry per role in the same contest.
+async function deckIds(client, entryId) {
+  const { data, error } = await client.rpc('get_deck', { p_entry_id: entryId });
   if (error) throw new Error(`get_deck: ${error.message}`);
   return new Set((data ?? []).map((r) => r.profile_id));
 }
 
-async function insertSwipe(client, contestId, swiper, target, direction) {
+async function insertSwipe(client, contestId, swiper, swiperRole, target, direction) {
   return client.from('swipes').insert({
     contest_id: contestId,
     swiper_profile_id: swiper,
+    swiper_role: swiperRole,
     target_profile_id: target,
     direction,
   });
@@ -137,6 +140,7 @@ try {
   // Clean slate, then create the four throwaways with profiles + entries.
   await deleteThrowaways();
   const P = {}; // key -> profileId
+  const E = {}; // key -> entryId (what get_deck is keyed by)
   for (const u of USERS) {
     const { data: created, error: uErr } = await admin.auth.admin.createUser({
       email: u.email,
@@ -146,15 +150,19 @@ try {
     if (uErr) throw new Error(`createUser ${u.email}: ${uErr.message}`);
     const { data: prof, error: pErr } = await admin
       .from('profiles')
-      .insert({ user_id: created.user.id, display_name: `WP3 ${u.key}`, role: u.role })
+      .insert({ user_id: created.user.id, display_name: `WP3 ${u.key}` })
       .select('id')
       .single();
     if (pErr) throw new Error(`profile ${u.email}: ${pErr.message}`);
     P[u.key] = prof.id;
-    const { error: eErr } = await admin
+    // Role lives on the entry now.
+    const { data: entry, error: eErr } = await admin
       .from('entries')
-      .insert({ profile_id: prof.id, contest_id: CONTEST, division: u.division });
+      .insert({ profile_id: prof.id, contest_id: CONTEST, division: u.division, role: u.role })
+      .select('id')
+      .single();
     if (eErr) throw new Error(`entry ${u.email}: ${eErr.message}`);
+    E[u.key] = entry.id;
   }
 
   const a = await signIn(USERS[0].email);
@@ -162,7 +170,7 @@ try {
 
   // 1) B's deck contains A and D; excludes C (division) and B/E (role).
   //    Membership checks only — fixture/demo profiles share this contest.
-  const deck1 = await deckIds(b, CONTEST);
+  const deck1 = await deckIds(b, E.B);
   check(
     "B's deck contains A and D",
     deck1.has(P.A) && deck1.has(P.D),
@@ -172,34 +180,34 @@ try {
   check('B\'s deck EXCLUDES B and E (same role)', !deck1.has(P.B) && !deck1.has(P.E));
 
   // 2) A likes B -> no match yet; B still sees A (B hasn't swiped).
-  const { error: aLikeErr } = await insertSwipe(a, CONTEST, P.A, P.B, 'like');
+  const { error: aLikeErr } = await insertSwipe(a, CONTEST, P.A, 'leader', P.B, 'like');
   check('A can like B (own swipe accepted)', !aLikeErr, aLikeErr?.message);
   check('no match row after only A liked', !(await matchVisible(a, CONTEST, P.A, P.B)));
-  const deck2 = await deckIds(b, CONTEST);
+  const deck2 = await deckIds(b, E.B);
   check("B's deck STILL contains A (B hasn't swiped)", deck2.has(P.A));
 
   // 3) B likes A -> mutual match; both members can read it; B's deck drops A.
-  const { error: bLikeErr } = await insertSwipe(b, CONTEST, P.B, P.A, 'like');
+  const { error: bLikeErr } = await insertSwipe(b, CONTEST, P.B, 'follower', P.A, 'like');
   check('B can like A (own swipe accepted)', !bLikeErr, bLikeErr?.message);
   const seenByB = await matchVisible(b, CONTEST, P.A, P.B);
   const seenByA = await matchVisible(a, CONTEST, P.A, P.B);
   check('match row exists and BOTH A and B can select it', seenByB && seenByA);
-  const deck3 = await deckIds(b, CONTEST);
+  const deck3 = await deckIds(b, E.B);
   check("B's deck now EXCLUDES A (swiped + matched)", !deck3.has(P.A));
 
   // 4) B passes D -> D gone; re-calling get_deck confirms permanence.
-  const { error: bPassErr } = await insertSwipe(b, CONTEST, P.B, P.D, 'pass');
+  const { error: bPassErr } = await insertSwipe(b, CONTEST, P.B, 'follower', P.D, 'pass');
   check('B can pass D (own swipe accepted)', !bPassErr, bPassErr?.message);
-  const deck4 = await deckIds(b, CONTEST);
+  const deck4 = await deckIds(b, E.B);
   check('D gone from B\'s deck after pass', !deck4.has(P.D));
-  const deck5 = await deckIds(b, CONTEST);
+  const deck5 = await deckIds(b, E.B);
   check(
     'get_deck permanence: D still absent on re-call',
     !deck5.has(P.D) && !deck5.has(P.A)
   );
 
   // 5) Spoof: B inserts a swipe claiming A as the swiper -> RLS must reject.
-  const { error: spoofErr } = await insertSwipe(b, CONTEST, P.A, P.C, 'like');
+  const { error: spoofErr } = await insertSwipe(b, CONTEST, P.A, 'leader', P.C, 'like');
   check(
     "spoof rejected: B cannot insert a swipe as A's profile",
     !!spoofErr,

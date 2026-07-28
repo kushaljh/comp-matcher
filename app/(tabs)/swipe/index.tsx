@@ -112,7 +112,9 @@ export default function SwipeScreen() {
   const entriesQuery = useMyEntries(profileId);
   const myFaceQuery = useMyFace(profileId);
 
-  const [selectedContestId, setSelectedContestId] = useState<string | null>(null);
+  // Selection is by ENTRY, not contest: a dancer entered in one contest as both
+  // roles has two stubs there, and they are two separate decks.
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   // Live count for the ACTIVE stub. The other stubs read their (server) deck
   // count; this one has to follow the swipes the deck has already committed.
   const [remaining, setRemaining] = useState<number | null>(null);
@@ -121,38 +123,43 @@ export default function SwipeScreen() {
   // Default to the first entry; also recover if the selection is ever stale.
   useEffect(() => {
     if (!entries?.length) return;
-    if (!selectedContestId || !entries.some((e) => e.contestId === selectedContestId)) {
-      setSelectedContestId(entries[0].contestId);
+    if (!selectedEntryId || !entries.some((e) => e.entryId === selectedEntryId)) {
+      setSelectedEntryId(entries[0].entryId);
     }
-  }, [entries, selectedContestId]);
+  }, [entries, selectedEntryId]);
 
-  const contestIds = useMemo(() => (entries ?? []).map((e) => e.contestId), [entries]);
-  const deckCounts = useDeckCounts(contestIds);
+  const entryIds = useMemo(() => (entries ?? []).map((e) => e.entryId), [entries]);
+  const deckCounts = useDeckCounts(entryIds);
 
-  const deckQuery = useDeck(selectedContestId);
+  const deckQuery = useDeck(selectedEntryId);
   const deckCards = useMemo(() => deckQuery.data ?? [], [deckQuery.data]);
   const historyQuery = useDeckHistory(deckCards.map((c) => c.profile_id));
-  const statsQuery = useContestStats(selectedContestId, profileId, wide);
 
-  // Refetch the deck whenever the screen regains focus (and on contest change,
+  const selectedEntry = entries?.find((e) => e.entryId === selectedEntryId) ?? null;
+  const statsQuery = useContestStats(
+    selectedEntry?.contestId,
+    profileId,
+    selectedEntry?.role,
+    wide
+  );
+
+  // Refetch the deck whenever the screen regains focus (and on entry change,
   // which is handled by the query key). Guarantees swiped cards never resurface.
   const refetchDeck = deckQuery.refetch;
   useFocusEffect(
     useCallback(() => {
-      if (selectedContestId) refetchDeck();
-    }, [selectedContestId, refetchDeck])
+      if (selectedEntryId) refetchDeck();
+    }, [selectedEntryId, refetchDeck])
   );
 
-  const selectedEntry = entries?.find((e) => e.contestId === selectedContestId) ?? null;
-
   const stubCounts = useMemo(() => {
-    if (!selectedContestId || remaining === null) return deckCounts;
-    return { ...deckCounts, [selectedContestId]: remaining };
-  }, [deckCounts, selectedContestId, remaining]);
+    if (!selectedEntryId || remaining === null) return deckCounts;
+    return { ...deckCounts, [selectedEntryId]: remaining };
+  }, [deckCounts, selectedEntryId, remaining]);
 
-  const handleSelect = useCallback((contestId: string) => {
+  const handleSelect = useCallback((entryId: string) => {
     setRemaining(null);
-    setSelectedContestId(contestId);
+    setSelectedEntryId(entryId);
   }, []);
 
   if (profileIdQuery.isLoading || (profileId && entriesQuery.isLoading)) {
@@ -188,13 +195,13 @@ export default function SwipeScreen() {
     <View style={styles.column}>
       <ContestStubs
         entries={entries}
-        selectedContestId={selectedContestId}
+        selectedEntryId={selectedEntryId}
         counts={stubCounts}
         onSelect={handleSelect}
       />
 
       <View style={styles.deckHost}>
-        {!selectedContestId || deckQuery.isLoading ? (
+        {!selectedEntry || deckQuery.isLoading ? (
           <View style={styles.centered}>
             <ActivityIndicator color={colors.brass} />
           </View>
@@ -216,15 +223,17 @@ export default function SwipeScreen() {
           </View>
         ) : (
           <Deck
-            key={selectedContestId}
+            key={selectedEntry.entryId}
             cards={deckCards}
             historyByProfile={historyQuery.data ?? {}}
-            contestId={selectedContestId}
-            contestName={selectedEntry?.contestName ?? 'this contest'}
-            eventName={selectedEntry?.eventName ?? ''}
+            entryId={selectedEntry.entryId}
+            contestId={selectedEntry.contestId}
+            contestName={selectedEntry.contestName}
+            eventName={selectedEntry.eventName}
             myProfileId={profileId}
+            myRole={selectedEntry.role}
             myFace={myFaceQuery.data ?? { displayName: 'You', photoUrl: null }}
-            roleLine={roleLineFor(myFaceQuery.data?.role, selectedEntry?.division)}
+            roleLine={roleLineFor(selectedEntry.role, selectedEntry.division)}
             cardWidth={cardWidth}
             onSeeMatches={() => router.push('/matches')}
             onGoToEvents={() => router.push('/events')}

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import type { Enums } from '../../lib/database.types';
 import {
   fetchMatchDetail,
   fetchMatches,
@@ -35,11 +36,18 @@ export function useMatchDetail(matchId: string) {
   return { ...query, isLoading: profileLoading || query.isLoading };
 }
 
-export function useOtherEntry(profileId: string | undefined, contestId: string | undefined) {
+// The role is part of the key as well as the query: the same dancer can hold a
+// second entry in this contest at the opposite role, and that one belongs to a
+// different pairing entirely.
+export function useOtherEntry(
+  profileId: string | undefined,
+  contestId: string | undefined,
+  role: Enums<'dance_role'> | undefined
+) {
   return useQuery({
-    queryKey: ['matches', 'other-entry', profileId, contestId],
-    queryFn: () => fetchOtherEntry(profileId as string, contestId as string),
-    enabled: !!profileId && !!contestId,
+    queryKey: ['matches', 'other-entry', profileId, contestId, role],
+    queryFn: () => fetchOtherEntry(profileId as string, contestId as string, role as Enums<'dance_role'>),
+    enabled: !!profileId && !!contestId && !!role,
   });
 }
 

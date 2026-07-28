@@ -11,7 +11,7 @@ import { Screen } from '../../../theme/components';
 import { TEXT_SCALES, useTheme, type ThemeMode } from '../../../theme/ThemeProvider';
 import { useSession } from '../../../features/auth/SessionProvider';
 import { confirmAsync } from '../../../features/profile/confirm';
-import { useDeleteAccount, useMyProfile, useSignOut } from '../../../features/profile/hooks';
+import { useDeleteAccount, useSignOut } from '../../../features/profile/hooks';
 
 const MODE_OPTIONS: { label: string; value: ThemeMode }[] = [
   { label: 'Light', value: 'light' },
@@ -20,8 +20,6 @@ const MODE_OPTIONS: { label: string; value: ThemeMode }[] = [
 ];
 
 const SCALE_LABELS = ['Small', 'Default', 'Large', 'Larger'];
-
-const ROLE_LABELS: Record<string, string> = { leader: 'Leader', follower: 'Follower' };
 
 function SectionLabel({ children }: { children: string }) {
   const { colors, fonts, fs } = useTheme();
@@ -83,12 +81,10 @@ export default function SettingsScreen() {
     setReduceMotion,
   } = useTheme();
   const { session } = useSession();
-  const { data: profile } = useMyProfile();
   const signOut = useSignOut();
   const deleteAccount = useDeleteAccount();
 
   const email = session?.user.email ?? '—';
-  const role = profile ? (ROLE_LABELS[profile.role] ?? profile.role) : '—';
 
   const handleSignOut = async () => {
     const confirmed = await confirmAsync('Sign out?', 'You can sign back in any time.', 'Sign out');
@@ -191,12 +187,6 @@ export default function SettingsScreen() {
                 style={{ fontFamily: fonts.mono, fontSize: fs(12), color: colors.ink2, flexShrink: 1 }}
               >
                 {email}
-              </Text>
-            </View>
-            <View style={[styles.row, { borderTopWidth: 1, borderTopColor: colors.line }]}>
-              <Text style={{ fontFamily: fonts.body, fontSize: fs(14.5), color: colors.ink }}>Role</Text>
-              <Text style={{ fontFamily: fonts.mono, fontSize: fs(12), color: colors.ink2 }}>
-                {`${role} · fixed`}
               </Text>
             </View>
             <Pressable

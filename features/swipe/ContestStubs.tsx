@@ -4,19 +4,24 @@
 
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
-import type { MyEntry } from './types';
+import type { DanceRole, MyEntry } from './types';
+
+const ROLE_VERB: Record<DanceRole, string> = {
+  leader: 'leading',
+  follower: 'following',
+};
 
 type ContestStubsProps = {
   entries: MyEntry[];
-  selectedContestId: string | null;
-  /** contestId -> dancers still on that floor. Missing while the deck loads. */
+  selectedEntryId: string | null;
+  /** entryId -> dancers still on that floor. Missing while the deck loads. */
   counts: Record<string, number>;
-  onSelect: (contestId: string) => void;
+  onSelect: (entryId: string) => void;
 };
 
 export function ContestStubs({
   entries,
-  selectedContestId,
+  selectedEntryId,
   counts,
   onSelect,
 }: ContestStubsProps) {
@@ -34,12 +39,12 @@ export function ContestStubs({
       contentContainerStyle={styles.row}
     >
       {entries.map((entry) => {
-        const active = entry.contestId === selectedContestId;
-        const left = counts[entry.contestId];
+        const active = entry.entryId === selectedEntryId;
+        const left = counts[entry.entryId];
         return (
           <Pressable
-            key={entry.contestId}
-            onPress={() => onSelect(entry.contestId)}
+            key={entry.entryId}
+            onPress={() => onSelect(entry.entryId)}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
             style={[
@@ -83,7 +88,11 @@ export function ContestStubs({
               numberOfLines={1}
               style={[styles.meta, { fontFamily: fonts.mono, fontSize: fs(9), color: colors.ink2 }]}
             >
-              {left === undefined ? entry.division : `${left} on the floor · ${entry.division}`}
+              {/* The role is always shown: a dancer entered in one contest at
+                  both roles gets two stubs that are otherwise identical. */}
+              {left === undefined
+                ? `${entry.division} · ${ROLE_VERB[entry.role]}`
+                : `${left} on the floor · ${entry.division} · ${ROLE_VERB[entry.role]}`}
             </Text>
           </Pressable>
         );

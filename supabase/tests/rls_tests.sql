@@ -31,11 +31,13 @@ insert into auth.users (id, aud, role, email, created_at, updated_at) values
   ('00000000-0000-4000-a000-0000000000c1', 'authenticated', 'authenticated', 'rls_c@test.local', now(), now()),
   ('00000000-0000-4000-a000-0000000000d1', 'authenticated', 'authenticated', 'rls_d@test.local', now(), now());
 
-insert into public.profiles (id, user_id, display_name, role) values
-  ('00000000-0000-4000-b000-0000000000a1', '00000000-0000-4000-a000-0000000000a1', 'Test A (leader)',   'leader'),
-  ('00000000-0000-4000-b000-0000000000b1', '00000000-0000-4000-a000-0000000000b1', 'Test B (follower)', 'follower'),
-  ('00000000-0000-4000-b000-0000000000c1', '00000000-0000-4000-a000-0000000000c1', 'Test C (follower)', 'follower'),
-  ('00000000-0000-4000-b000-0000000000d1', '00000000-0000-4000-a000-0000000000d1', 'Test D (leader)',   'leader');
+-- Role lives on the ENTRY now, so the profile names keep the old labels only as
+-- a reading aid for the assertions below.
+insert into public.profiles (id, user_id, display_name) values
+  ('00000000-0000-4000-b000-0000000000a1', '00000000-0000-4000-a000-0000000000a1', 'Test A (leader)'),
+  ('00000000-0000-4000-b000-0000000000b1', '00000000-0000-4000-a000-0000000000b1', 'Test B (follower)'),
+  ('00000000-0000-4000-b000-0000000000c1', '00000000-0000-4000-a000-0000000000c1', 'Test C (follower)'),
+  ('00000000-0000-4000-b000-0000000000d1', '00000000-0000-4000-a000-0000000000d1', 'Test D (leader)');
 
 -- B has two contacts (used by the contacts-visibility test)
 insert into public.profile_contacts (profile_id, platform, handle) values
@@ -50,19 +52,21 @@ insert into public.contests (id, event_id, name, divisions) values
   ('00000000-0000-4000-d000-000000000001', '00000000-0000-4000-c000-000000000001', 'Test Contest',
    array['novice','advanced']::public.division[]);
 
--- entries: A novice, B novice, C advanced, D novice (all in ct1)
-insert into public.entries (profile_id, contest_id, division) values
-  ('00000000-0000-4000-b000-0000000000a1', '00000000-0000-4000-d000-000000000001', 'novice'),
-  ('00000000-0000-4000-b000-0000000000b1', '00000000-0000-4000-d000-000000000001', 'novice'),
-  ('00000000-0000-4000-b000-0000000000c1', '00000000-0000-4000-d000-000000000001', 'advanced'),
-  ('00000000-0000-4000-b000-0000000000d1', '00000000-0000-4000-d000-000000000001', 'novice');
+-- entries: A novice lead, B novice follow, C advanced follow, D novice lead.
+-- Explicit ids because get_deck() is keyed by ENTRY now, not contest.
+insert into public.entries (id, profile_id, contest_id, division, role) values
+  ('00000000-0000-4000-e000-0000000000a1', '00000000-0000-4000-b000-0000000000a1', '00000000-0000-4000-d000-000000000001', 'novice',   'leader'),
+  ('00000000-0000-4000-e000-0000000000b1', '00000000-0000-4000-b000-0000000000b1', '00000000-0000-4000-d000-000000000001', 'novice',   'follower'),
+  ('00000000-0000-4000-e000-0000000000c1', '00000000-0000-4000-b000-0000000000c1', '00000000-0000-4000-d000-000000000001', 'advanced', 'follower'),
+  ('00000000-0000-4000-e000-0000000000d1', '00000000-0000-4000-b000-0000000000d1', '00000000-0000-4000-d000-000000000001', 'novice',   'leader');
 
 -- B passes on A (a 'pass' so A liking B later does NOT create a match)
-insert into public.swipes (contest_id, swiper_profile_id, target_profile_id, direction) values
+insert into public.swipes (contest_id, swiper_profile_id, target_profile_id, direction, swiper_role) values
   ('00000000-0000-4000-d000-000000000001',
    '00000000-0000-4000-b000-0000000000b1',
    '00000000-0000-4000-b000-0000000000a1',
-   'pass');
+   'pass',
+   'follower');
 
 -- ===========================================================================
 -- TEST 3 — event visibility (approved vs pending vs anon)
@@ -115,11 +119,12 @@ do $$
 declare blocked boolean := false; st text;
 begin
   begin
-    insert into public.swipes (contest_id, swiper_profile_id, target_profile_id, direction)
+    insert into public.swipes (contest_id, swiper_profile_id, target_profile_id, direction, swiper_role)
     values ('00000000-0000-4000-d000-000000000001',
             '00000000-0000-4000-b000-0000000000b1',   -- B's profile (not A's)
             '00000000-0000-4000-b000-0000000000c1',   -- target C (no existing swipe -> only RLS can block)
-            'pass');
+            'pass',
+            'follower');                              -- B's actual entry role
   exception when others then
     blocked := true; st := sqlstate;
   end;
@@ -141,10 +146,11 @@ do $$
 declare blocked boolean := false; st text;
 begin
   begin
-    insert into public.matches (contest_id, profile_a, profile_b)
+    insert into public.matches (contest_id, profile_a, profile_b, profile_a_role)
     values ('00000000-0000-4000-d000-000000000001',
             '00000000-0000-4000-b000-0000000000a1',   -- ordered pA < pB so the CHECK passes
-            '00000000-0000-4000-b000-0000000000b1');
+            '00000000-0000-4000-b000-0000000000b1',
+            'leader');
   exception when others then
     blocked := true; st := sqlstate;
   end;
@@ -200,7 +206,7 @@ begin
          bool_or(profile_id = '00000000-0000-4000-b000-0000000000c1'),
          bool_or(profile_id = '00000000-0000-4000-b000-0000000000d1')
     into n_total, has_b, has_c, has_d
-    from public.get_deck('00000000-0000-4000-d000-000000000001');
+    from public.get_deck('00000000-0000-4000-e000-0000000000a1');
 
   if n_total <> 1 then raise exception 'TEST 6 FAIL: deck should have exactly 1 candidate, got %', n_total; end if;
   if not coalesce(has_b, false) then raise exception 'TEST 6 FAIL: deck missing B (opposite role, same division)'; end if;
@@ -208,14 +214,15 @@ begin
   if coalesce(has_d, false) then raise exception 'TEST 6 FAIL: deck includes D (leader -> same role)'; end if;
 
   -- A likes B (real insert as A). B previously PASSED on A, so no match forms.
-  insert into public.swipes (contest_id, swiper_profile_id, target_profile_id, direction)
+  insert into public.swipes (contest_id, swiper_profile_id, target_profile_id, direction, swiper_role)
   values ('00000000-0000-4000-d000-000000000001',
           '00000000-0000-4000-b000-0000000000a1',
           '00000000-0000-4000-b000-0000000000b1',
-          'like');
+          'like',
+          'leader');
 
   -- B must now be gone from A's deck.
-  select count(*) into n_total from public.get_deck('00000000-0000-4000-d000-000000000001');
+  select count(*) into n_total from public.get_deck('00000000-0000-4000-e000-0000000000a1');
   if n_total <> 0 then raise exception 'TEST 6 FAIL: swiped candidate B still in deck (got % rows)', n_total; end if;
 end $$;
 reset role;
@@ -238,10 +245,11 @@ end $$;
 reset role;
 
 -- Create the match as postgres (bypasses RLS) — pA < pB so ordering is valid.
-insert into public.matches (contest_id, profile_a, profile_b) values
+insert into public.matches (contest_id, profile_a, profile_b, profile_a_role) values
   ('00000000-0000-4000-d000-000000000001',
    '00000000-0000-4000-b000-0000000000a1',
-   '00000000-0000-4000-b000-0000000000b1');
+   '00000000-0000-4000-b000-0000000000b1',
+   'leader');
 
 -- After match: A sees B's 2 contacts.
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000a1","role":"authenticated"}', true);

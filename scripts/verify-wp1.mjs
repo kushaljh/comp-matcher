@@ -78,7 +78,7 @@ function assert(condition, message) {
 // profile (onConflict: user_id) -> delete-then-insert contacts -> delete-
 // then-insert history. Kept in lockstep with that function so this script
 // actually exercises the fix, not just "an" onboarding write path.
-async function performOnboardingWrites(userId, { photoSuffix, displayName, role, values, bio, contacts, history }) {
+async function performOnboardingWrites(userId, { photoSuffix, displayName, values, bio, contacts, history }) {
   const photoPath = `${userId}/avatar-verify-${photoSuffix}.png`;
   const { error: uploadErr } = await anon.storage
     .from('profile-photos')
@@ -89,7 +89,7 @@ async function performOnboardingWrites(userId, { photoSuffix, displayName, role,
   const { data: profile, error: profileErr } = await anon
     .from('profiles')
     .upsert(
-      { user_id: userId, display_name: displayName, role, values, bio, photo_url: publicUrlData.publicUrl },
+      { user_id: userId, display_name: displayName, values, bio, photo_url: publicUrlData.publicUrl },
       { onConflict: 'user_id' }
     )
     .select('id')
@@ -152,7 +152,6 @@ try {
     firstAttempt = await performOnboardingWrites(userAId, {
       photoSuffix: 'first',
       displayName: 'WP1 Verify User',
-      role: 'leader',
       values: ['winning', 'yolo'],
       bio: 'Created by scripts/verify-wp1.mjs',
       contacts: [
@@ -172,12 +171,11 @@ try {
   // --- read back + assert (same shape the UI's useHasProfile / screens read) ---
   const { data: readProfile, error: readProfileErr } = await anon
     .from('profiles')
-    .select('id, display_name, role, photo_url, values, bio')
+    .select('id, display_name, photo_url, values, bio')
     .eq('user_id', userAId)
     .maybeSingle();
   assert(!readProfileErr && readProfile !== null, `read back own profile row (${readProfileErr?.message ?? 'ok'})`);
   assert(readProfile?.display_name === 'WP1 Verify User', 'profile.display_name round-trips');
-  assert(readProfile?.role === 'leader', 'profile.role round-trips');
   assert(readProfile?.photo_url === firstAttempt.publicUrl, 'profile.photo_url round-trips');
 
   const { data: readContacts, error: readContactsErr } = await anon
@@ -218,7 +216,6 @@ try {
     retryAttempt = await performOnboardingWrites(userAId, {
       photoSuffix: 'retry',
       displayName: 'WP1 Verify User (retried)',
-      role: 'leader',
       values: ['winning', 'yolo'],
       bio: 'Retried after a simulated partial failure',
       contacts: [

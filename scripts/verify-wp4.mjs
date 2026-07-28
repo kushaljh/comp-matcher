@@ -135,20 +135,22 @@ async function createThrowawayUser(email) {
   return data.user.id;
 }
 
-async function createProfile(userId, { role, display_name }, values) {
+async function createProfile(userId, { display_name }, values) {
   const { data, error } = await admin
     .from('profiles')
-    .insert({ user_id: userId, role, display_name, bio: `${display_name} bio`, values })
+    .insert({ user_id: userId, display_name, bio: `${display_name} bio`, values })
     .select('id')
     .single();
   if (error) throw new Error(`insert profile for ${display_name}: ${error.message}`);
   return data.id;
 }
 
-async function createEntry(profileId) {
+// Role lives on the entry now, so it is passed in here rather than read off
+// the profile.
+async function createEntry(profileId, role) {
   const { error } = await admin
     .from('entries')
-    .insert({ profile_id: profileId, contest_id: CONTEST_ID, division: 'novice' });
+    .insert({ profile_id: profileId, contest_id: CONTEST_ID, division: 'novice', role });
   if (error) throw new Error(`insert entry: ${error.message}`);
 }
 
@@ -212,9 +214,9 @@ async function main() {
   const bProfileId = await createProfile(state.bUserId, USERS.b, ['connection']);
   const cProfileId = await createProfile(state.cUserId, USERS.c, ['fun']);
 
-  await createEntry(aProfileId);
-  await createEntry(bProfileId);
-  await createEntry(cProfileId);
+  await createEntry(aProfileId, USERS.a.role);
+  await createEntry(bProfileId, USERS.b.role);
+  await createEntry(cProfileId, USERS.c.role);
 
   await createContact(aProfileId, 'instagram', '@verify_a');
   const aHistoryId = await createHistory(aProfileId, {
@@ -243,6 +245,7 @@ async function main() {
     .insert({
       contest_id: CONTEST_ID,
       swiper_profile_id: aProfileId,
+      swiper_role: USERS.a.role,
       target_profile_id: bProfileId,
       direction: 'like',
     });
@@ -253,6 +256,7 @@ async function main() {
     .insert({
       contest_id: CONTEST_ID,
       swiper_profile_id: bProfileId,
+      swiper_role: USERS.b.role,
       target_profile_id: aProfileId,
       direction: 'like',
     });

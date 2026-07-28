@@ -4,6 +4,7 @@
 import { Image } from 'expo-image';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
+import { PhotoSegments } from '../shared/MediaSections';
 import { withAlpha } from './tint';
 import type { DeckCard } from './types';
 
@@ -17,6 +18,9 @@ type CardContentProps = {
    * Null while signing, which renders the monogram.
    */
   photoUri: string | null;
+  /** How many photos this dancer has, and which one is showing. */
+  photoCount: number;
+  photoIndex: number;
 };
 
 /**
@@ -76,7 +80,13 @@ export function Monogram({
   );
 }
 
-export function CardContent({ card, roleLine, photoUri }: CardContentProps) {
+export function CardContent({
+  card,
+  roleLine,
+  photoUri,
+  photoCount,
+  photoIndex,
+}: CardContentProps) {
   const { colors, fonts, fs, radii } = useTheme();
   const initial = card.display_name.trim().charAt(0).toUpperCase() || '?';
 
@@ -92,6 +102,8 @@ export function CardContent({ card, roleLine, photoUri }: CardContentProps) {
       ) : (
         <Monogram initial={initial} caption="NO PHOTOGRAPH ON FILE" />
       )}
+
+      <PhotoSegments count={photoCount} index={photoIndex} />
 
       <View style={styles.scrimWrap} pointerEvents="none">
         <ScrimRamp color={colors.scrim} />

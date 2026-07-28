@@ -1,13 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Enums } from '../../lib/database.types';
 import {
+  addClip,
   addContact,
+  addGalleryPhoto,
   addHistory,
+  deleteClip,
   deleteContact,
   deleteEntry,
+  deleteGalleryPhoto,
   deleteHistory,
   deleteMyAccount,
+  fetchClips,
   fetchContacts,
+  fetchGalleryPhotos,
   fetchCurrentUserId,
   fetchHistory,
   fetchMyEntries,
@@ -19,6 +25,7 @@ import {
   updatePhotoUrl,
   updateProfile,
   uploadProfilePhoto,
+  type GalleryPhoto,
 } from './api';
 
 export function useMyProfileId() {
@@ -198,4 +205,72 @@ export function useSignOut() {
 
 export function useDeleteAccount() {
   return useMutation({ mutationFn: deleteMyAccount });
+}
+
+// --- Gallery photos + spotlight clips -------------------------------------------
+
+// Both invalidate the shared ['media', ...] caches as well as their own: the
+// deck and the partner dossier read gallery/clips through features/shared/media
+// and would otherwise show the pre-mutation state until an unrelated refetch.
+
+export function useMyGalleryPhotos(profileId: string | undefined) {
+  return useQuery({
+    queryKey: ['profile', 'gallery', profileId],
+    queryFn: () => fetchGalleryPhotos(profileId as string),
+    enabled: !!profileId,
+  });
+}
+
+export function useAddGalleryPhoto(profileId: string | undefined, userId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (localUri: string) =>
+      addGalleryPhoto(profileId as string, userId as string, localUri),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', 'gallery', profileId] });
+      queryClient.invalidateQueries({ queryKey: ['media', 'photos'] });
+    },
+  });
+}
+
+export function useDeleteGalleryPhoto(profileId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (photo: GalleryPhoto) => deleteGalleryPhoto(photo),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', 'gallery', profileId] });
+      queryClient.invalidateQueries({ queryKey: ['media', 'photos'] });
+    },
+  });
+}
+
+export function useMyClips(profileId: string | undefined) {
+  return useQuery({
+    queryKey: ['profile', 'clips', profileId],
+    queryFn: () => fetchClips(profileId as string),
+    enabled: !!profileId,
+  });
+}
+
+export function useAddClip(profileId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (clip: { platform: Enums<'clip_platform'>; url: string; videoId: string | null }) =>
+      addClip(profileId as string, clip),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', 'clips', profileId] });
+      queryClient.invalidateQueries({ queryKey: ['media', 'clips'] });
+    },
+  });
+}
+
+export function useDeleteClip(profileId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteClip(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', 'clips', profileId] });
+      queryClient.invalidateQueries({ queryKey: ['media', 'clips'] });
+    },
+  });
 }

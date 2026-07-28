@@ -31,8 +31,10 @@ export type SwipeCardHandle = {
 type SwipeCardProps = {
   card: DeckCard;
   roleLine: string;
-  /** Signed URL for the card's photo; see CardContent. */
+  /** Signed URL for the card's currently-shown photo; see CardContent. */
   photoUri: string | null;
+  photoCount: number;
+  photoIndex: number;
   /** Card width — drives the fling threshold and the fly-off distance only. */
   width: number;
   // Called once, ~one fly-off duration after a swipe is committed (by gesture,
@@ -40,6 +42,8 @@ type SwipeCardProps = {
   onSwiped: (direction: SwipeDirection) => void;
   /** A tap that landed in the middle band of the card. */
   onTapMiddle: () => void;
+  /** A tap in an outer third: -1 pages back through photos, +1 forward. */
+  onPagePhoto: (delta: number) => void;
 };
 
 const OFFSCREEN_MULTIPLIER = 1.7;
@@ -90,7 +94,10 @@ function Stamp({
 }
 
 export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
-  ({ card, roleLine, photoUri, width, onSwiped, onTapMiddle }, ref) => {
+  (
+    { card, roleLine, photoUri, photoCount, photoIndex, width, onSwiped, onTapMiddle, onPagePhoto },
+    ref
+  ) => {
     const { colors, radii, reduceMotion } = useTheme();
     const translateX = useSharedValue(0);
     const translateY = useSharedValue(0);
@@ -144,8 +151,8 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
             translateY.value = withSpring(0);
           }
         });
-      // Only the middle band opens the full card, per the design (the outer
-      // thirds are its photo-paging zones, which we have no gallery for).
+      // The design's three tap zones: the middle band opens the full card, the
+      // outer thirds page backwards/forwards through the photo gallery.
       const tap = Gesture.Tap()
         .maxDistance(8)
         .onEnd((e, success) => {
@@ -153,9 +160,11 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
           if (!success) return;
           const rel = e.x / width;
           if (rel > 0.3 && rel < 0.7) runOnJS(onTapMiddle)();
+          else if (rel <= 0.3) runOnJS(onPagePhoto)(-1);
+          else runOnJS(onPagePhoto)(1);
         });
       return Gesture.Exclusive(pan, tap);
-    }, [threshold, triggerSwipe, translateX, translateY, onTapMiddle, width]);
+    }, [threshold, triggerSwipe, translateX, translateY, onTapMiddle, onPagePhoto, width]);
 
     const cardStyle = useAnimatedStyle(() => {
       const rotate = interpolate(
@@ -190,7 +199,13 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
             cardStyle,
           ]}
         >
-          <CardContent card={card} roleLine={roleLine} photoUri={photoUri} />
+          <CardContent
+            card={card}
+            roleLine={roleLine}
+            photoUri={photoUri}
+            photoCount={photoCount}
+            photoIndex={photoIndex}
+          />
           <Stamp label="Ask 'em" color={colors.brass} side="left" style={likeStampStyle} />
           <Stamp label="Sit out" color={colors.red} side="right" style={passStampStyle} />
         </Animated.View>

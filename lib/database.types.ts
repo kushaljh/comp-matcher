@@ -231,6 +231,76 @@ export type Database = {
           },
         ]
       }
+      profile_clips: {
+        Row: {
+          created_at: string
+          id: string
+          platform: Database["public"]["Enums"]["clip_platform"]
+          position: number
+          profile_id: string
+          url: string
+          video_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          platform: Database["public"]["Enums"]["clip_platform"]
+          position: number
+          profile_id: string
+          url: string
+          video_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          platform?: Database["public"]["Enums"]["clip_platform"]
+          position?: number
+          profile_id?: string
+          url?: string
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_clips_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profile_photos: {
+        Row: {
+          created_at: string
+          id: string
+          path: string
+          position: number
+          profile_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          path: string
+          position: number
+          profile_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          path?: string
+          position?: number
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_photos_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profile_contacts: {
         Row: {
           handle: string
@@ -387,6 +457,7 @@ export type Database = {
       }
     }
     Enums: {
+      clip_platform: "youtube" | "instagram" | "tiktok"
       contact_platform:
         | "instagram"
         | "facebook"
@@ -510,6 +581,7 @@ export type Enums<
 export const Constants = {
   public: {
     Enums: {
+      clip_platform: ["youtube", "instagram", "tiktok"],
       contact_platform: [
         "instagram",
         "facebook",

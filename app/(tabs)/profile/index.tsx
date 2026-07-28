@@ -13,6 +13,7 @@ import { useIsAdmin } from '../../../features/admin/hooks';
 import { ContactsSection } from '../../../features/profile/components/ContactsSection';
 import { EntriesSection } from '../../../features/profile/components/EntriesSection';
 import { HistorySection } from '../../../features/profile/components/HistorySection';
+import { MediaSection } from '../../../features/profile/components/MediaSection';
 import { ValuesEditor } from '../../../features/profile/components/ValuesEditor';
 import {
   useCurrentUserId,
@@ -178,7 +179,7 @@ export default function ProfileScreen() {
                 </Text>
               </Pressable>
               <Text style={{ fontFamily: fonts.body, fontSize: fs(12.5), color: colors.ink2, marginTop: 6 }}>
-                More photo slots coming.
+                Your first photo. Add more below.
               </Text>
             </View>
           </View>
@@ -212,6 +213,10 @@ export default function ProfileScreen() {
             onPress={handleSave}
             disabled={!isDirty || updateProfile.isPending}
           />
+        </View>
+
+        <View style={styles.section}>
+          <MediaSection profileId={profileId} userId={userId ?? undefined} />
         </View>
 
         <View style={styles.section}>

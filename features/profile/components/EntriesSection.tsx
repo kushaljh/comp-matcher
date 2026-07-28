@@ -10,6 +10,11 @@ const DIVISION_LABELS: Record<string, string> = {
   open: 'Open',
 };
 
+const ROLE_LABELS: Record<string, string> = {
+  leader: 'Lead',
+  follower: 'Follow',
+};
+
 export function EntriesSection({ profileId }: { profileId: string | undefined }) {
   const { colors, fonts, fs, radii } = useTheme();
   const { data: entries, isLoading } = useMyEntries(profileId);
@@ -38,7 +43,7 @@ export function EntriesSection({ profileId }: { profileId: string | undefined })
           marginBottom: 9,
         }}
       >
-        Your entries · one division per contest
+        Your entries · role and division per contest
       </Text>
       {isLoading && <ActivityIndicator color={colors.brass} />}
       {!isLoading && rows.length === 0 && (
@@ -76,7 +81,9 @@ export function EntriesSection({ profileId }: { profileId: string | undefined })
                   color: colors.bg,
                 }}
               >
-                {DIVISION_LABELS[entry.division] ?? entry.division}
+                {/* Role as well as division: two entries in the same contest,
+                    one per role, would otherwise look identical here. */}
+                {`${ROLE_LABELS[entry.role]} · ${DIVISION_LABELS[entry.division] ?? entry.division}`}
               </Text>
             </View>
             <Pressable
@@ -99,8 +106,8 @@ export function EntriesSection({ profileId }: { profileId: string | undefined })
         ))}
       </View>
       <Text style={{ fontFamily: fonts.body, fontSize: fs(12.5), color: colors.ink2, marginTop: 9 }}>
-        Your role is fixed account-wide, but division is set per entry — novice at one event and
-        advanced at another is fine.
+        Role and division are both per entry — lead one contest and follow another, novice at one
+        event and advanced at the next. You can even enter the same contest twice, once per role.
       </Text>
     </View>
   );

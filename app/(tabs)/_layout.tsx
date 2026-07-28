@@ -6,6 +6,7 @@
 // to lay out its own wide-layout columns (e.g. The Floor's right rail) — the
 // shell only owns the header and the nav chrome.
 
+import { Image } from 'expo-image';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { GestureResponderEvent, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -33,11 +34,12 @@ function useActiveHref() {
 // ---------------------------------------------------------------------------
 
 /**
- * Brass-ringed roundel with a radiating fan behind a DM Serif monogram — the
- * stand-in for the design's swing-out logo image, which we don't have.
+ * Brass-ringed roundel with a radiating fan behind the swing-out mark. The
+ * pixel-art pair is the same artwork as the app icon and the favicon, so the
+ * tab and the in-app header finally read as one brand rather than two.
  */
 function LogoRoundel() {
-  const { colors, fonts, fs } = useTheme();
+  const { colors } = useTheme();
   return (
     <View style={[styles.roundelRing, { backgroundColor: colors.likeBg }]}>
       <View style={[styles.roundel, { borderColor: colors.cardLine }]}>
@@ -47,9 +49,13 @@ function LogoRoundel() {
             style={[styles.fanBlade, { backgroundColor: colors.cardLine, transform: [{ rotate: `${deg}deg` }] }]}
           />
         ))}
-        <Text style={{ fontFamily: fonts.serif, fontSize: fs(15), color: colors.brass, letterSpacing: 0.5 }}>
-          CM
-        </Text>
+        <Image
+          source={require('../../assets/logo-swingout.png')}
+          style={styles.logoMark}
+          contentFit="contain"
+          // The art is already brass on transparent — no tint needed.
+          accessibilityLabel="Comp Matcher"
+        />
       </View>
     </View>
   );
@@ -249,6 +255,10 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  logoMark: {
+    width: 30,
+    height: 30,
   },
   roundel: {
     width: 44,

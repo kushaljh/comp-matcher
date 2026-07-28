@@ -13,6 +13,7 @@ export type MyEntry = {
   contestName: string;
   eventName: string;
   division: Enums<'division'>;
+  role: Enums<'dance_role'>;
   note: string | null;
 };
 
@@ -20,6 +21,7 @@ type RawEntryRow = {
   id: string;
   contest_id: string;
   division: Enums<'division'>;
+  role: Enums<'dance_role'>;
   note: string | null;
   contest: { name: string; event: { name: string } | null } | null;
 };
@@ -157,7 +159,7 @@ export async function deleteHistory(id: string): Promise<void> {
 export async function fetchMyEntries(profileId: string): Promise<MyEntry[]> {
   const { data, error } = await supabase
     .from('entries')
-    .select('id, contest_id, division, note, contest:contests(name, event:events(name))')
+    .select('id, contest_id, division, role, note, contest:contests(name, event:events(name))')
     .eq('profile_id', profileId);
   if (error) throw error;
 
@@ -168,6 +170,7 @@ export async function fetchMyEntries(profileId: string): Promise<MyEntry[]> {
     contestName: row.contest?.name ?? 'Unknown contest',
     eventName: row.contest?.event?.name ?? 'Unknown event',
     division: row.division,
+    role: row.role,
     note: row.note,
   }));
 }
@@ -188,4 +191,75 @@ export async function deleteMyAccount(): Promise<void> {
   const { error } = await supabase.rpc('delete_my_account');
   if (error) throw error;
   await signOut();
+}
+
+// --- Gallery photos + spotlight clips -------------------------------------------
+
+export type GalleryPhoto = Tables<'profile_photos'>;
+export type Clip = Tables<'profile_clips'>;
+
+export async function fetchGalleryPhotos(profileId: string): Promise<GalleryPhoto[]> {
+  const { data, error } = await supabase
+    .from('profile_photos')
+    .select('*')
+    .eq('profile_id', profileId)
+    .order('position');
+  if (error) throw error;
+  return data ?? [];
+}
+
+// Position is "one past the current last" rather than a count, so removing a
+// middle photo and adding another can't collide on the unique (profile,
+// position) index.
+export async function addGalleryPhoto(
+  profileId: string,
+  userId: string,
+  localUri: string
+): Promise<void> {
+  const path = await uploadProfilePhoto(userId, localUri);
+  const existing = await fetchGalleryPhotos(profileId);
+  const nextPosition = existing.reduce((max, p) => Math.max(max, p.position), -1) + 1;
+  const { error } = await supabase
+    .from('profile_photos')
+    .insert({ profile_id: profileId, path, position: nextPosition });
+  if (error) throw error;
+}
+
+// Removes the storage object too — otherwise deleting a photo would leave the
+// bytes behind forever, still readable by any signed-in user who kept a path.
+export async function deleteGalleryPhoto(photo: GalleryPhoto): Promise<void> {
+  const { error } = await supabase.from('profile_photos').delete().eq('id', photo.id);
+  if (error) throw error;
+  await supabase.storage.from('profile-photos').remove([photo.path]);
+}
+
+export async function fetchClips(profileId: string): Promise<Clip[]> {
+  const { data, error } = await supabase
+    .from('profile_clips')
+    .select('*')
+    .eq('profile_id', profileId)
+    .order('position');
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addClip(
+  profileId: string,
+  clip: { platform: Enums<'clip_platform'>; url: string; videoId: string | null }
+): Promise<void> {
+  const existing = await fetchClips(profileId);
+  const nextPosition = existing.reduce((max, c) => Math.max(max, c.position), -1) + 1;
+  const { error } = await supabase.from('profile_clips').insert({
+    profile_id: profileId,
+    platform: clip.platform,
+    url: clip.url,
+    video_id: clip.videoId,
+    position: nextPosition,
+  });
+  if (error) throw error;
+}
+
+export async function deleteClip(id: string): Promise<void> {
+  const { error } = await supabase.from('profile_clips').delete().eq('id', id);
+  if (error) throw error;
 }

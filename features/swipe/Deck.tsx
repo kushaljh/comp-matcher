@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useSignedPhotoUrls } from '../shared/photo';
+import { useClips, useGalleryPhotos } from '../shared/media';
 import { suppressMatchBanner } from '../live/matchLive';
 import { deckKey, deleteOwnPass, findMatch, insertSwipe, statsKey } from './data';
 import { Bulbs } from './Decor';
@@ -65,13 +66,25 @@ export function Deck({
   // One signing round-trip for the whole stack, not one per card. Keyed off the
   // full `cards` list rather than `stack` so a swipe doesn't re-key the query
   // and re-sign everything that's left.
-  const photoUrls = useSignedPhotoUrls(cards.map((c) => c.photo_url));
+  // Extra photos and clips for every candidate in the deck, batched the same
+  // way (one query each, not one per card).
+  const galleryByProfile = useGalleryPhotos(cards.map((c) => c.profile_id));
+  const clipsByProfile = useClips(cards.map((c) => c.profile_id));
+
+  // Primary photos AND every gallery photo go through one signing call.
+  const photoUrls = useSignedPhotoUrls([
+    ...cards.map((c) => c.photo_url),
+    ...Object.values(galleryByProfile).flat().map((g) => g.path),
+  ]);
 
   const [stack, setStack] = useState<DeckCard[]>(cards);
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  // Which of the top card's photos is showing. Reset whenever the top card
+  // changes, or the next dancer would open on photo 3.
+  const [photoIndex, setPhotoIndex] = useState(0);
   const [matchedFace, setMatchedFace] = useState<MatchFace | null>(null);
   const topCardRef = useRef<SwipeCardHandle>(null);
 
@@ -212,6 +225,32 @@ export function Deck({
   }, [undoStack, entryId, contestId, myProfileId, myRole, queryClient, showNotice]);
 
   const top = stack[0];
+
+  // Primary photo first, then the extras — the order the segments count in.
+  const topPhotoPaths = top
+    ? [top.photo_url, ...(galleryByProfile[top.profile_id] ?? []).map((g) => g.path)].filter(
+        (p): p is string => !!p
+      )
+    : [];
+  const topPhotoCount = Math.max(topPhotoPaths.length, 1);
+  const safeIndex = Math.min(photoIndex, topPhotoPaths.length - 1);
+  const topPhotoUri = topPhotoPaths[safeIndex] ? (photoUrls[topPhotoPaths[safeIndex]] ?? null) : null;
+
+  // Reset paging when the top card changes — otherwise the next dancer opens on
+  // whatever photo index the previous one was left on.
+  const topProfileId = top?.profile_id;
+  useEffect(() => {
+    setPhotoIndex(0);
+  }, [topProfileId]);
+
+  // Wrap around rather than dead-ending at either edge.
+  const pagePhoto = useCallback(
+    (delta: number) => {
+      if (topPhotoCount < 2) return;
+      setPhotoIndex((i) => (i + delta + topPhotoCount) % topPhotoCount);
+    },
+    [topPhotoCount]
+  );
   const lastAction = undoStack[undoStack.length - 1];
   const canUndo = !!lastAction && lastAction.direction === 'pass';
 
@@ -285,10 +324,13 @@ export function Deck({
             ref={topCardRef}
             card={top}
             roleLine={roleLine}
-            photoUri={top.photo_url ? (photoUrls[top.photo_url] ?? null) : null}
+            photoUri={topPhotoUri}
+            photoCount={topPhotoCount}
+            photoIndex={safeIndex < 0 ? 0 : safeIndex}
             width={cardWidth}
             onSwiped={(direction) => handleSwipe(top, direction)}
             onTapMiddle={() => setExpanded(true)}
+            onPagePhoto={pagePhoto}
           />
         ) : (
           <View
@@ -373,6 +415,10 @@ export function Deck({
             history={historyByProfile[top.profile_id] ?? []}
             roleLine={roleLine}
             photoUri={top.photo_url ? (photoUrls[top.photo_url] ?? null) : null}
+            galleryUris={(galleryByProfile[top.profile_id] ?? []).map(
+              (g) => photoUrls[g.path] ?? null
+            )}
+            clips={clipsByProfile[top.profile_id] ?? []}
             onClose={() => setExpanded(false)}
           />
         ) : null}

@@ -8,6 +8,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PhotoLightbox } from '../shared/PhotoLightbox';
 import { useTheme } from '../../theme/ThemeProvider';
 import { formatLocalScene } from '../shared/location';
+import type { Clip } from '../shared/media';
+import { ClipGrid, GalleryRow, PhotoSegments } from '../shared/MediaSections';
 import { Monogram, ScrimRamp } from './CardContent';
 import { RiseIn } from './Decor';
 import { withAlpha } from './tint';
@@ -17,21 +19,38 @@ type ExpandedCardProps = {
   card: DeckCard;
   history: CompetitionHistoryRow[];
   roleLine: string;
-  /** Signed URL for the card's photo; see CardContent. */
+  /** Signed URL for the card's PRIMARY photo; see CardContent. */
   photoUri: string | null;
+  /** Signed URLs for the extra gallery photos, in position order. */
+  galleryUris: (string | null)[];
+  clips: Clip[];
   onClose: () => void;
 };
 
 /** The design brasses up a result worth bragging about. */
 const PODIUM = /1st|2nd|3rd|finals/i;
 
-export function ExpandedCard({ card, history, roleLine, photoUri, onClose }: ExpandedCardProps) {
+export function ExpandedCard({
+  card,
+  history,
+  roleLine,
+  photoUri,
+  galleryUris,
+  clips,
+  onClose,
+}: ExpandedCardProps) {
   const { colors, fonts, fs, radii } = useTheme();
   const initial = card.display_name.trim().charAt(0).toUpperCase() || '?';
   const [photoOpen, setPhotoOpen] = useState(false);
   // Null when the dancer set none of city/state/country, so the whole block
   // disappears rather than rendering an empty label.
   const localScene = formatLocalScene(card);
+
+  // Primary first, then the extras — the order the segment bar and the
+  // thumbnail row both count in.
+  const allPhotos = [photoUri, ...galleryUris];
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const shownPhoto = allPhotos[photoIndex] ?? photoUri;
 
   return (
     <RiseIn style={styles.host}>
@@ -43,14 +62,15 @@ export function ExpandedCard({ card, history, roleLine, photoUri, onClose }: Exp
       >
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
           <View style={[styles.photo, { backgroundColor: colors.photoBg }]}>
-            {photoUri ? (
+            <PhotoSegments count={allPhotos.length} index={photoIndex} />
+            {shownPhoto ? (
               <Pressable
                 accessibilityRole="imagebutton"
                 accessibilityLabel="View full photo"
                 onPress={() => setPhotoOpen(true)}
                 style={StyleSheet.absoluteFill}
               >
-                <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                <Image source={{ uri: shownPhoto }} style={StyleSheet.absoluteFill} contentFit="cover" />
               </Pressable>
             ) : (
               <Monogram initial={initial} size={96} />
@@ -79,6 +99,8 @@ export function ExpandedCard({ card, history, roleLine, photoUri, onClose }: Exp
           </View>
 
           <View style={styles.body}>
+            <GalleryRow uris={allPhotos} activeIndex={photoIndex} onSelect={setPhotoIndex} />
+
             {localScene ? (
               <View style={styles.block}>
                 <Text style={[styles.micro, { fontFamily: fonts.mono, fontSize: fs(9), color: colors.ink2 }]}>
@@ -106,6 +128,8 @@ export function ExpandedCard({ card, history, roleLine, photoUri, onClose }: Exp
                 </Text>
               </View>
             ) : null}
+
+            <ClipGrid clips={clips} />
 
             {history.length > 0 ? (
               <View style={styles.block}>
@@ -174,7 +198,7 @@ export function ExpandedCard({ card, history, roleLine, photoUri, onClose }: Exp
           </Pressable>
         </View>
       </View>
-      <PhotoLightbox uri={photoUri} visible={photoOpen} onClose={() => setPhotoOpen(false)} />
+      <PhotoLightbox uri={shownPhoto} visible={photoOpen} onClose={() => setPhotoOpen(false)} />
     </RiseIn>
   );
 }

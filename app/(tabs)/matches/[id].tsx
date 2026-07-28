@@ -1,8 +1,6 @@
-// The Partner Dossier — restyled match detail. A single profile photo (the
-// schema has one photo, not a gallery) with a scrim identity block, the
-// contact-reveal box, values, bio, and competition record. No floor-footage /
-// photo-gallery section: the schema has neither video clips nor multiple
-// photos per profile (see the WP log for the full list of compromises).
+// The Partner Dossier — restyled match detail. The photo gallery with its
+// segment bar, a scrim identity block, the contact-reveal box, local scene,
+// values, bio, floor footage, and competition record.
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { useState } from 'react';
@@ -10,6 +8,9 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { PhotoLightbox } from '../../../features/shared/PhotoLightbox';
 import { useSignedPhotoUrl } from '../../../features/shared/photo';
 import { formatLocalScene } from '../../../features/shared/location';
+import { useClips, useGalleryPhotos } from '../../../features/shared/media';
+import { useSignedPhotoUrls } from '../../../features/shared/photo';
+import { ClipGrid, GalleryRow, PhotoSegments } from '../../../features/shared/MediaSections';
 import { Screen } from '../../../theme/components';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { Chip, ContactLine } from '../../../features/matches/components';
@@ -53,6 +54,11 @@ export default function MatchDetailScreen() {
   // photo_url is a storage path — the profile-photos bucket is private. Called
   // here, above the early returns, so the hook order never changes.
   const photoUri = useSignedPhotoUrl(match?.otherProfile.photoUrl);
+  const galleryByProfile = useGalleryPhotos([otherProfileId]);
+  const clipsByProfile = useClips([otherProfileId]);
+  const gallery = otherProfileId ? (galleryByProfile[otherProfileId] ?? []) : [];
+  const galleryUrls = useSignedPhotoUrls(gallery.map((g) => g.path));
+  const [photoIndex, setPhotoIndex] = useState(0);
 
   if (isLoading) {
     return (
@@ -78,19 +84,25 @@ export default function MatchDetailScreen() {
     .join(' · ');
   const initial = otherProfile.displayName.trim().charAt(0).toUpperCase() || '?';
   const localScene = formatLocalScene(otherProfile);
+  // Primary first, then the extras — the order both the segment bar and the
+  // thumbnail row count in.
+  const allPhotos = [photoUri, ...gallery.map((g) => galleryUrls[g.path] ?? null)];
+  const shownPhoto = allPhotos[photoIndex] ?? photoUri;
+  const clips = otherProfileId ? (clipsByProfile[otherProfileId] ?? []) : [];
 
   return (
     <Screen style={styles.screen}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={[styles.photoHeader, { backgroundColor: colors.photoBg }]}>
-          {photoUri ? (
+          <PhotoSegments count={allPhotos.length} index={photoIndex} />
+          {shownPhoto ? (
             <Pressable
               accessibilityRole="imagebutton"
               accessibilityLabel="View full photo"
               onPress={() => setPhotoOpen(true)}
               style={StyleSheet.absoluteFill}
             >
-              <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+              <Image source={{ uri: shownPhoto }} style={StyleSheet.absoluteFill} contentFit="cover" />
             </Pressable>
           ) : (
             <View style={styles.monogramWrap}>
@@ -166,6 +178,8 @@ export default function MatchDetailScreen() {
             )}
           </View>
 
+          <GalleryRow uris={allPhotos} activeIndex={photoIndex} onSelect={setPhotoIndex} />
+
           {localScene ? (
             <View style={styles.section}>
               <Text
@@ -198,6 +212,8 @@ export default function MatchDetailScreen() {
               {otherProfile.bio}
             </Text>
           ) : null}
+
+          <ClipGrid clips={clips} />
 
           <View style={styles.section}>
             <Text
@@ -258,7 +274,7 @@ export default function MatchDetailScreen() {
         </View>
       </ScrollView>
 
-      <PhotoLightbox uri={photoUri} visible={photoOpen} onClose={() => setPhotoOpen(false)} />
+      <PhotoLightbox uri={shownPhoto} visible={photoOpen} onClose={() => setPhotoOpen(false)} />
 
       <View style={[styles.footer, { backgroundColor: colors.scrim, borderTopColor: colors.line }]}>
         <Text

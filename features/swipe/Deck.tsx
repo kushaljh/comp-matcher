@@ -149,6 +149,10 @@ export function Deck({
         direction,
       });
       queryClient.invalidateQueries({ queryKey: statsKey(contestId, myProfileId, myRole) });
+      // The Season counts the same pool this deck deals from, so a swipe has
+      // just made that number one smaller. Whole prefix — a like can create a
+      // match, which the other role's count excludes too.
+      queryClient.invalidateQueries({ queryKey: ['entries', 'pool'] });
       if (direction === 'like') {
         const matched = await findMatch({
           contestId,

@@ -2,8 +2,8 @@
 // fills the column, and the ✕ / ↺ / ✓ row sits under it. At >= 1080px the deck
 // keeps its 452px column and a 288px rail joins it on the right.
 
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -119,12 +119,39 @@ export default function SwipeScreen() {
   // count; this one has to follow the swipes the deck has already committed.
   const [remaining, setRemaining] = useState<number | null>(null);
 
+  // "Find a partner" on The Season sends the entry it was pressed for; the
+  // focus effect below is what acts on it.
+  const { entry: entryParam } = useLocalSearchParams<{ entry?: string }>();
+  // Whether this visit has already honoured the param. Without it, any later
+  // refetch of `entries` would re-run the focus effect and yank the selection
+  // back off a stub the dancer had since tapped themselves.
+  const honouredParamRef = useRef(false);
+  // The entry ids we saw last, to recognise one that has just been created.
+  const seenIdsRef = useRef<Set<string>>(new Set());
+
   const entries = entriesQuery.data;
-  // Default to the first entry; also recover if the selection is ever stale.
   useEffect(() => {
     if (!entries?.length) return;
-    if (!selectedEntryId || !entries.some((e) => e.entryId === selectedEntryId)) {
-      setSelectedEntryId(entries[0].entryId);
+
+    const ids = entries.map((e) => e.entryId);
+    const seen = seenIdsRef.current;
+    // Grown, and not the first load — on the first load there is nothing to
+    // compare against, so every id would read as new.
+    const added = seen.size ? ids.filter((id) => !seen.has(id)) : [];
+    seenIdsRef.current = new Set(ids);
+
+    // Just entered a contest — open its deck rather than leaving the dancer on
+    // whichever stub happened to be selected.
+    if (added.length) {
+      setRemaining(null);
+      setSelectedEntryId(added[0]);
+      return;
+    }
+    // Otherwise hold the selection, falling back to the first stub when it's
+    // unset or points at an entry that's gone (withdrawn).
+    if (!selectedEntryId || !ids.includes(selectedEntryId)) {
+      setRemaining(null);
+      setSelectedEntryId(ids[0]);
     }
   }, [entries, selectedEntryId]);
 
@@ -146,10 +173,37 @@ export default function SwipeScreen() {
   // Refetch the deck whenever the screen regains focus (and on entry change,
   // which is handled by the query key). Guarantees swiped cards never resurface.
   const refetchDeck = deckQuery.refetch;
+  // Read through a ref so tapping a stub doesn't re-run the effect below and
+  // re-apply the deep link on top of the dancer's own choice.
+  const selectedRef = useRef(selectedEntryId);
+  selectedRef.current = selectedEntryId;
   useFocusEffect(
     useCallback(() => {
-      if (selectedEntryId) refetchDeck();
-    }, [selectedEntryId, refetchDeck])
+      // Arriving via "Find a partner" selects that entry. Applied here rather
+      // than on the param changing, because pressing it twice for the same
+      // contest sends the same value and must still land on that deck.
+      // `entries` is a dep so a param that arrives before the list loads is
+      // still honoured once it does.
+      if (!honouredParamRef.current && entryParam && entries?.some((e) => e.entryId === entryParam)) {
+        honouredParamRef.current = true;
+        setRemaining(null);
+        setSelectedEntryId(entryParam);
+      }
+      if (selectedRef.current) refetchDeck();
+    }, [entryParam, entries, refetchDeck])
+  );
+
+  // Leaving the screen re-arms the deep link for the next visit. Its own effect
+  // with no deps, so the cleanup fires only on an actual blur — sharing the
+  // effect above would also re-arm every time `entries` or the deck refetcher
+  // changed identity, which is exactly what the guard exists to survive.
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        honouredParamRef.current = false;
+      },
+      []
+    )
   );
 
   const stubCounts = useMemo(() => {

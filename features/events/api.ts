@@ -145,3 +145,27 @@ export async function fetchEntriesForContest(contestId: string): Promise<EntryFo
   if (error) throw error;
   return data ?? [];
 }
+
+// How many dancers this role would actually be DEALT in each division — the
+// same set get_deck returns, so the Season's number and the Floor's stub count
+// can't disagree. Counting `entries` client-side is not equivalent: it can't
+// see who the caller has already swiped or paired with (RLS hides those rows
+// from everyone but their owner) and it counts the caller's own entry too.
+//
+// Divisions with nobody available are absent from the RPC result; the caller
+// reads a missing key as 0.
+export type PoolCounts = Partial<Record<Enums<'division'>, number>>;
+
+export async function fetchPoolCounts(
+  contestId: string,
+  role: Enums<'dance_role'>
+): Promise<PoolCounts> {
+  const { data, error } = await supabase.rpc('get_pool_counts', {
+    p_contest_id: contestId,
+    p_role: role,
+  });
+  if (error) throw error;
+  const counts: PoolCounts = {};
+  for (const row of data ?? []) counts[row.division] = row.available;
+  return counts;
+}

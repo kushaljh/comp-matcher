@@ -44,6 +44,23 @@ export function useEntriesForContests(contestIds: string[]) {
   });
 }
 
+// The partner pool for the contests currently on screen: how many dancers the
+// given role would actually be DEALT in each division, straight from the same
+// server-side rules as the deck. One query per (contest, role) — the Season
+// only asks for the expanded event's contests, so this is a handful of calls
+// rather than one per contest in the season.
+//
+// The role is part of the key: a dancer looking at their leader tab and their
+// follower tab of the same contest is looking at two different pools.
+export function usePoolCounts(pairs: { contestId: string; role: Enums<'dance_role'> }[]) {
+  return useQueries({
+    queries: pairs.map(({ contestId, role }) => ({
+      queryKey: ['entries', 'pool', contestId, role] as const,
+      queryFn: () => api.fetchPoolCounts(contestId, role),
+    })),
+  });
+}
+
 // Every entry mutation must invalidate ALL the caches that show "my entries",
 // not just this feature's own — Your Card (['profile','entries']), the Floor's
 // contest stubs (['swipe','myEntries']) and that contest's deck stay mounted
@@ -51,6 +68,11 @@ export function useEntriesForContests(contestIds: string[]) {
 // unrelated refetch. Same set used by features/profile's leave mutation.
 function invalidateEntryCaches(queryClient: ReturnType<typeof useQueryClient>, contestId: string) {
   queryClient.invalidateQueries({ queryKey: ['entries', 'byContest', contestId] });
+  // Entering or leaving changes the caller's own division and role, which is
+  // what the pool counts are computed relative to — and the whole prefix, not
+  // just this contest, because the counts exclude anyone already paired with
+  // and withdrawing dissolves pairings.
+  queryClient.invalidateQueries({ queryKey: ['entries', 'pool'] });
   queryClient.invalidateQueries({ queryKey: ['profile', 'entries'] });
   queryClient.invalidateQueries({ queryKey: ['swipe', 'myEntries'] });
   // Deck caches are keyed by ENTRY id now, and one contest change can affect

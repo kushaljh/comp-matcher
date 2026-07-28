@@ -22,7 +22,7 @@ import {
 import { Screen } from '../../../theme/components';
 import { useTheme } from '../../../theme/ThemeProvider';
 import type { Enums } from '../../../lib/database.types';
-import type { ContestRow, EntryForCounts } from '../../../features/events/api';
+import type { ContestRow, EntryForCounts, PoolCounts } from '../../../features/events/api';
 import {
   useApprovedEvents,
   useContestsForEvents,
@@ -30,6 +30,7 @@ import {
   useJoinContest,
   useLeaveContest,
   useMyProfileId,
+  usePoolCounts,
   useUpdateEntryDivision,
 } from '../../../features/events/hooks';
 import { formatDateRangeShort, formatEventDateBlock } from '../../../features/events/format';
@@ -104,12 +105,25 @@ export default function EventsScreen() {
     return myEntries(contestId).find((e) => e.role === role);
   }
 
+  // Pool counts come from the server so they match what the Floor will deal —
+  // the caller themselves, everyone they've already swiped and everyone they've
+  // already paired with are all excluded, none of which is visible from here.
+  // Only the expanded event's contests are asked for; the rest aren't drawing a
+  // number.
+  const openContests = openEventId ? (contestsByEvent.get(openEventId) ?? []) : [];
+  const poolPairs = openContests.map((c) => ({ contestId: c.id, role: roleFor(c.id) }));
+  const poolResults = usePoolCounts(poolPairs);
+  const poolByContest = new Map<string, PoolCounts>(
+    poolPairs.map((p, i) => [p.contestId, poolResults[i]?.data ?? {}])
+  );
+
   async function handleRefresh() {
     setRefreshing(true);
     await Promise.all([
       eventsQuery.refetch(),
       ...contestsResults.map((r) => r.refetch()),
       ...entriesResults.map((r) => r.refetch()),
+      ...poolResults.map((r) => r.refetch()),
     ]);
     setRefreshing(false);
   }
@@ -308,17 +322,17 @@ export default function EventsScreen() {
                         </Text>
                       ) : (
                         contests.map((contest, i) => {
-                          const entries = entriesByContest.get(contest.id) ?? [];
                           const role = roleFor(contest.id);
                           const entry = myEntry(contest.id, role);
                           const div = entry?.division;
-                          // Who this role could actually pair with: the opposite
-                          // role only. Counting both would flatter the number
-                          // with dancers you will never be shown.
-                          const pool = entries.filter((e) => e.role === otherRole(role));
+                          // Who this role would actually be dealt: opposite role
+                          // only, minus the caller and anyone already swiped or
+                          // paired with. Server-computed, so this number and the
+                          // Floor's stub count can't drift apart.
+                          const pool = poolByContest.get(contest.id) ?? {};
                           const poolCount = div
-                            ? pool.filter((e) => e.division === div).length
-                            : pool.length;
+                            ? (pool[div] ?? 0)
+                            : contest.divisions.reduce((n, d) => n + (pool[d] ?? 0), 0);
                           const partnerWord = otherRole(role) === 'leader' ? 'leads' : 'follows';
                           const poolLine = div
                             ? poolCount
@@ -436,7 +450,7 @@ export default function EventsScreen() {
                                 </Text>
                                 {contest.divisions.map((d) => {
                                   const selected = div === d;
-                                  const count = pool.filter((e) => e.division === d).length;
+                                  const count = pool[d] ?? 0;
                                   const textColor = selected ? colors.bg : div ? colors.ink : colors.ink2;
                                   return (
                                     <Pressable
@@ -479,7 +493,7 @@ export default function EventsScreen() {
                                 })}
                               </View>
 
-                              {div ? (
+                              {entry ? (
                                 confirmingContestId === contest.id ? (
                                   <View style={styles.confirmRow}>
                                     <Text style={{ fontFamily: fonts.body, fontSize: fs(13), color: colors.ink }}>
@@ -521,7 +535,16 @@ export default function EventsScreen() {
                                 ) : (
                                   <View style={styles.actionsRow}>
                                     <Pressable
-                                      onPress={() => router.push('/swipe')}
+                                      // Carry the entry, not just the route: the
+                                      // Floor otherwise falls back to the oldest
+                                      // entry, which for a dancer entered at both
+                                      // roles is the wrong deck.
+                                      onPress={() =>
+                                        router.push({
+                                          pathname: '/swipe',
+                                          params: { entry: entry.id },
+                                        })
+                                      }
                                       style={[
                                         styles.actionPill,
                                         { backgroundColor: colors.brass, borderRadius: radii.pill },

@@ -451,6 +451,16 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      get_pool_counts: {
+        Args: {
+          p_contest_id: string
+          p_role: Database["public"]["Enums"]["dance_role"]
+        }
+        Returns: {
+          available: number
+          division: Database["public"]["Enums"]["division"]
+        }[]
+      }
       other_role: {
         Args: { r: Database["public"]["Enums"]["dance_role"] }
         Returns: Database["public"]["Enums"]["dance_role"]

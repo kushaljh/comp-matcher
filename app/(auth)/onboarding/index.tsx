@@ -13,6 +13,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import type { ContactPlatform } from '../../../features/auth/api';
 import { submitOnboarding } from '../../../features/auth/api';
 import { CONTACT_PLATFORMS, PLATFORM_LABELS } from '../../../features/auth/constants';
+import { validateContact } from '../../../features/profile/contactValidation';
 import { ValuesField } from '../../../features/auth/ValuesField';
 import { useSession } from '../../../features/auth/SessionProvider';
 import { hasProfileQueryKey } from '../../../features/auth/useHasProfile';
@@ -116,12 +117,21 @@ export default function OnboardingScreen() {
 
   const filledContacts = contacts.filter((c) => c.handle.trim().length > 0);
 
+  // Validate each filled row so the message appears under the field the user is
+  // typing in, rather than as one submit-time error naming none of them.
+  const contactErrors = contacts.map((c) => {
+    if (!c.handle.trim()) return null;
+    const result = validateContact(c.platform, c.handle);
+    return result.ok ? null : result.error;
+  });
+  const hasContactError = contactErrors.some(Boolean);
+
   const missing: string[] = [];
   if (!photoUri) missing.push('a profile photo');
   if (!displayName.trim()) missing.push('a display name');
   if (filledContacts.length === 0) missing.push('at least one contact');
 
-  const canSubmit = missing.length === 0 && !submitting;
+  const canSubmit = missing.length === 0 && !hasContactError && !submitting;
 
   async function handleSubmit() {
     if (!session || !photoUri) return;
@@ -172,7 +182,12 @@ export default function OnboardingScreen() {
         displayName: displayName.trim(),
         values: selectedValues,
         bio: bio.trim() ? bio.trim() : null,
-        contacts: filledContacts.map((c) => ({ platform: c.platform, handle: c.handle.trim() })),
+        // Store the canonical form, not the raw text — the submit button is
+        // already disabled while any row is invalid, so these all validate.
+        contacts: filledContacts.map((c) => {
+          const result = validateContact(c.platform, c.handle);
+          return { platform: c.platform, handle: result.ok ? result.value : c.handle.trim() };
+        }),
         history: filledHistory,
       });
 
@@ -263,6 +278,9 @@ export default function OnboardingScreen() {
                   </Pressable>
                 ) : null}
               </View>
+              {contactErrors[index] ? (
+                <Text style={errorText}>{contactErrors[index]}</Text>
+              ) : null}
             </View>
           ))}
           <Pressable onPress={addContact}>

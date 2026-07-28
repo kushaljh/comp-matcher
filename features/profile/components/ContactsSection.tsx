@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextField } from '../../../theme/components';
+import { validateContact } from '../contactValidation';
 import { useTheme } from '../../../theme/ThemeProvider';
 import type { Enums } from '../../../lib/database.types';
 import {
@@ -41,8 +42,10 @@ export function ContactsSection({ profileId }: { profileId: string | undefined }
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editHandle, setEditHandle] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
   const [newPlatform, setNewPlatform] = useState<Enums<'contact_platform'> | null>(null);
   const [newHandle, setNewHandle] = useState('');
+  const [newError, setNewError] = useState<string | null>(null);
 
   const contactList = contacts ?? [];
   const usedPlatforms = new Set(contactList.map((c) => c.platform));
@@ -52,26 +55,52 @@ export function ContactsSection({ profileId }: { profileId: string | undefined }
   const startEdit = (id: string, currentHandle: string) => {
     setEditingId(id);
     setEditHandle(currentHandle);
+    setEditError(null);
   };
 
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditError(null);
+  };
+
+  // Edits are validated too. They previously weren't checked at all beyond
+  // "not empty", so a good handle could be replaced with a broken one.
   const saveEdit = () => {
-    if (!editingId || !editHandle.trim()) return;
+    if (!editingId) return;
+    const contact = contactList.find((c) => c.id === editingId);
+    if (!contact) return;
+    const result = validateContact(contact.platform, editHandle);
+    if (!result.ok) {
+      setEditError(result.error);
+      return;
+    }
+    setEditError(null);
     updateContact.mutate(
-      { id: editingId, handle: editHandle.trim() },
+      { id: editingId, handle: result.value },
       { onSuccess: () => setEditingId(null) }
     );
   };
 
+  // Backing out of adding a contact. Without this, tapping a platform chip by
+  // mistake left the field open with no way to dismiss it.
+  const cancelNewContact = () => {
+    setNewPlatform(null);
+    setNewHandle('');
+    setNewError(null);
+  };
+
   const submitNewContact = () => {
-    if (!newPlatform || !newHandle.trim()) return;
+    if (!newPlatform) return;
+    const result = validateContact(newPlatform, newHandle);
+    if (!result.ok) {
+      setNewError(result.error);
+      return;
+    }
+    setNewError(null);
+    // The canonical form is stored, not the raw text.
     addContact.mutate(
-      { platform: newPlatform, handle: newHandle.trim() },
-      {
-        onSuccess: () => {
-          setNewPlatform(null);
-          setNewHandle('');
-        },
-      }
+      { platform: newPlatform, handle: result.value },
+      { onSuccess: cancelNewContact }
     );
   };
 
@@ -116,11 +145,17 @@ export function ContactsSection({ profileId }: { profileId: string | undefined }
               <Pressable style={styles.smallButton} onPress={saveEdit}>
                 <Text style={smallButtonText}>Save</Text>
               </Pressable>
-              <Pressable style={styles.smallButton} onPress={() => setEditingId(null)}>
+              <Pressable style={styles.smallButton} onPress={cancelEdit}>
                 <Text style={smallButtonText}>Cancel</Text>
               </Pressable>
             </View>
-          ) : (
+          ) : null}
+          {editingId === contact.id && editError ? (
+            <Text style={{ fontFamily: fonts.body, fontSize: fs(12.5), color: colors.red, marginTop: 6 }}>
+              {editError}
+            </Text>
+          ) : null}
+          {editingId !== contact.id ? (
             <View style={styles.editRow}>
               <Text style={{ fontFamily: fonts.mono, fontSize: fs(13), color: colors.ink, flex: 1 }}>
                 {contact.handle}
@@ -136,7 +171,7 @@ export function ContactsSection({ profileId }: { profileId: string | undefined }
                 <Text style={smallButtonText}>Delete</Text>
               </Pressable>
             </View>
-          )}
+          ) : null}
         </View>
       ))}
 
@@ -184,8 +219,16 @@ export function ContactsSection({ profileId }: { profileId: string | undefined }
               <Pressable style={styles.smallButton} onPress={submitNewContact}>
                 <Text style={smallButtonText}>Add contact</Text>
               </Pressable>
+              <Pressable style={styles.smallButton} onPress={cancelNewContact}>
+                <Text style={smallButtonText}>Cancel</Text>
+              </Pressable>
             </View>
           )}
+          {newError ? (
+            <Text style={{ fontFamily: fonts.body, fontSize: fs(12.5), color: colors.red, marginTop: 6 }}>
+              {newError}
+            </Text>
+          ) : null}
         </View>
       ) : (
         <Text style={{ fontFamily: fonts.body, fontSize: fs(12.5), color: colors.ink2 }}>

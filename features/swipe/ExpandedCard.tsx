@@ -16,13 +16,15 @@ type ExpandedCardProps = {
   card: DeckCard;
   history: CompetitionHistoryRow[];
   roleLine: string;
+  /** Signed URL for the card's photo; see CardContent. */
+  photoUri: string | null;
   onClose: () => void;
 };
 
 /** The design brasses up a result worth bragging about. */
 const PODIUM = /1st|2nd|3rd|finals/i;
 
-export function ExpandedCard({ card, history, roleLine, onClose }: ExpandedCardProps) {
+export function ExpandedCard({ card, history, roleLine, photoUri, onClose }: ExpandedCardProps) {
   const { colors, fonts, fs, radii } = useTheme();
   const initial = card.display_name.trim().charAt(0).toUpperCase() || '?';
   const [photoOpen, setPhotoOpen] = useState(false);
@@ -37,14 +39,14 @@ export function ExpandedCard({ card, history, roleLine, onClose }: ExpandedCardP
       >
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
           <View style={[styles.photo, { backgroundColor: colors.photoBg }]}>
-            {card.photo_url ? (
+            {photoUri ? (
               <Pressable
                 accessibilityRole="imagebutton"
                 accessibilityLabel="View full photo"
                 onPress={() => setPhotoOpen(true)}
                 style={StyleSheet.absoluteFill}
               >
-                <Image source={{ uri: card.photo_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
               </Pressable>
             ) : (
               <Monogram initial={initial} size={96} />
@@ -157,7 +159,7 @@ export function ExpandedCard({ card, history, roleLine, onClose }: ExpandedCardP
           </Pressable>
         </View>
       </View>
-      <PhotoLightbox uri={card.photo_url} visible={photoOpen} onClose={() => setPhotoOpen(false)} />
+      <PhotoLightbox uri={photoUri} visible={photoOpen} onClose={() => setPhotoOpen(false)} />
     </RiseIn>
   );
 }

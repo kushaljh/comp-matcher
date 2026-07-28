@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { Screen } from '../../../theme/components';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { Avatar } from '../../../features/matches/components';
+import { useSignedPhotoUrls } from '../../../features/shared/photo';
 import { formatRelativeTime } from '../../../features/matches/format';
 import { useMatches } from '../../../features/matches/hooks';
 import type { MatchListItem } from '../../../features/matches/api';
@@ -42,6 +43,8 @@ export default function MatchesScreen() {
   const router = useRouter();
   const { colors, fonts, fs, radii } = useTheme();
   const { data: matches, isLoading, isError, error } = useMatches();
+  // One signing call for every avatar on the card; stored values are paths.
+  const photos = useSignedPhotoUrls((matches ?? []).map((m) => m.otherProfile.photoUrl));
 
   if (isLoading) {
     return (
@@ -128,7 +131,14 @@ export default function MatchesScreen() {
                 ]}
                 onPress={() => router.push(`/matches/${match.id}`)}
               >
-                <Avatar uri={match.otherProfile.photoUrl} name={match.otherProfile.displayName} />
+                <Avatar
+                  uri={
+                    match.otherProfile.photoUrl
+                      ? (photos[match.otherProfile.photoUrl] ?? null)
+                      : null
+                  }
+                  name={match.otherProfile.displayName}
+                />
                 <View style={styles.rowText}>
                   <Text style={{ fontFamily: fonts.serif, fontSize: fs(19), color: colors.ink, lineHeight: fs(23) }}>
                     {match.otherProfile.displayName}

@@ -84,12 +84,12 @@ async function performOnboardingWrites(userId, { photoSuffix, displayName, value
     .from('profile-photos')
     .upload(photoPath, TINY_PNG, { contentType: 'image/png' });
   if (uploadErr) throw uploadErr;
-  const { data: publicUrlData } = anon.storage.from('profile-photos').getPublicUrl(photoPath);
+  // The bucket is private now: the app stores the object PATH, not a URL.
 
   const { data: profile, error: profileErr } = await anon
     .from('profiles')
     .upsert(
-      { user_id: userId, display_name: displayName, values, bio, photo_url: publicUrlData.publicUrl },
+      { user_id: userId, display_name: displayName, values, bio, photo_url: photoPath },
       { onConflict: 'user_id' }
     )
     .select('id')
@@ -113,7 +113,7 @@ async function performOnboardingWrites(userId, { photoSuffix, displayName, value
     if (error) throw error;
   }
 
-  return { profileId, photoPath, publicUrl: publicUrlData.publicUrl };
+  return { profileId, photoPath };
 }
 
 let userAId = null;
@@ -176,7 +176,29 @@ try {
     .maybeSingle();
   assert(!readProfileErr && readProfile !== null, `read back own profile row (${readProfileErr?.message ?? 'ok'})`);
   assert(readProfile?.display_name === 'WP1 Verify User', 'profile.display_name round-trips');
-  assert(readProfile?.photo_url === firstAttempt.publicUrl, 'profile.photo_url round-trips');
+  assert(readProfile?.photo_url === firstAttempt.photoPath, 'profile.photo_url round-trips as a storage PATH');
+
+  // --- private bucket: signed URLs work, anonymous reads do not ---------------
+  // This is the whole point of making profile-photos private, so assert both
+  // halves rather than trusting the bucket flag.
+  const { data: signed, error: signErr } = await anon.storage
+    .from('profile-photos')
+    .createSignedUrl(firstAttempt.photoPath, 60);
+  assert(!signErr && !!signed?.signedUrl, `signed in: can mint a signed URL (${signErr?.message ?? 'ok'})`);
+
+  if (signed?.signedUrl) {
+    const signedRes = await fetch(signed.signedUrl);
+    assert(signedRes.ok, `the signed URL actually serves the object (HTTP ${signedRes.status})`);
+  }
+
+  // The old public-object address must no longer serve anything, with no auth
+  // header at all — this is what a leaked URL would look like.
+  const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/profile-photos/${firstAttempt.photoPath}`;
+  const anonRes = await fetch(publicUrl);
+  assert(
+    !anonRes.ok,
+    `anonymous read of the raw object URL is refused (HTTP ${anonRes.status})`
+  );
 
   const { data: readContacts, error: readContactsErr } = await anon
     .from('profile_contacts')
@@ -241,7 +263,7 @@ try {
       .eq('id', profileId)
       .maybeSingle();
     assert(finalProfile?.display_name === 'WP1 Verify User (retried)', 'profile reflects the retried submit data');
-    assert(finalProfile?.photo_url === retryAttempt.publicUrl, 'photo_url reflects the retried upload');
+    assert(finalProfile?.photo_url === retryAttempt.photoPath, 'photo_url reflects the retried upload');
 
     const { data: finalContacts } = await anon.from('profile_contacts').select('platform, handle').eq('profile_id', profileId);
     assert((finalContacts?.length ?? 0) >= 2, `retry converges with >=2 contacts (got ${finalContacts?.length ?? 0})`);

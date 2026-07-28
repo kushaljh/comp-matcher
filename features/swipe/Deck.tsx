@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useSignedPhotoUrls } from '../shared/photo';
 import { suppressMatchBanner } from '../live/matchLive';
 import { deckKey, deleteOwnPass, findMatch, insertSwipe, statsKey } from './data';
 import { Bulbs } from './Decor';
@@ -60,6 +61,11 @@ export function Deck({
 }: DeckProps) {
   const { colors, fonts, fs, radii } = useTheme();
   const queryClient = useQueryClient();
+
+  // One signing round-trip for the whole stack, not one per card. Keyed off the
+  // full `cards` list rather than `stack` so a swipe doesn't re-key the query
+  // and re-sign everything that's left.
+  const photoUrls = useSignedPhotoUrls(cards.map((c) => c.photo_url));
 
   const [stack, setStack] = useState<DeckCard[]>(cards);
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
@@ -279,6 +285,7 @@ export function Deck({
             ref={topCardRef}
             card={top}
             roleLine={roleLine}
+            photoUri={top.photo_url ? (photoUrls[top.photo_url] ?? null) : null}
             width={cardWidth}
             onSwiped={(direction) => handleSwipe(top, direction)}
             onTapMiddle={() => setExpanded(true)}
@@ -365,6 +372,7 @@ export function Deck({
             card={top}
             history={historyByProfile[top.profile_id] ?? []}
             roleLine={roleLine}
+            photoUri={top.photo_url ? (photoUrls[top.photo_url] ?? null) : null}
             onClose={() => setExpanded(false)}
           />
         ) : null}

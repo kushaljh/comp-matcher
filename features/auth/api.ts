@@ -59,6 +59,8 @@ export type OnboardingInput = {
   history: OnboardingHistoryRow[];
 };
 
+// Returns the object PATH, not a URL — the bucket is private, so photos are
+// rendered through features/shared/photo.ts's signing hook.
 async function uploadProfilePhoto(userId: string, uri: string): Promise<string> {
   // The picked asset is a local (native) or blob/data (web) URI — fetch it
   // back into a Blob so it can be handed to storage.upload with a
@@ -72,8 +74,7 @@ async function uploadProfilePhoto(userId: string, uri: string): Promise<string> 
     .upload(path, blob, { contentType: 'image/jpeg' });
   if (uploadError) throw uploadError;
 
-  const { data } = supabase.storage.from('profile-photos').getPublicUrl(path);
-  return data.publicUrl;
+  return path;
 }
 
 // submitOnboarding must converge on a retry after a partial failure (e.g. the
@@ -89,7 +90,7 @@ async function uploadProfilePhoto(userId: string, uri: string): Promise<string> 
 //     partial attempt already wrote, regardless of whether the user edited
 //     any fields between attempts.
 export async function submitOnboarding(input: OnboardingInput): Promise<string> {
-  const photoUrl = await uploadProfilePhoto(input.userId, input.photoUri);
+  const photoPath = await uploadProfilePhoto(input.userId, input.photoUri);
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
@@ -99,7 +100,7 @@ export async function submitOnboarding(input: OnboardingInput): Promise<string> 
         display_name: input.displayName,
         values: input.values,
         bio: input.bio,
-        photo_url: photoUrl,
+        photo_url: photoPath,
       },
       { onConflict: 'user_id' }
     )

@@ -11,6 +11,12 @@ type CardContentProps = {
   card: DeckCard;
   /** "Follower · novice". Null until the caller's own role has loaded. */
   roleLine: string;
+  /**
+   * Signed URL for `card.photo_url`, resolved in bulk by the Deck — the bucket
+   * is private, so the stored value is a path and is not renderable directly.
+   * Null while signing, which renders the monogram.
+   */
+  photoUri: string | null;
 };
 
 /**
@@ -70,15 +76,15 @@ export function Monogram({
   );
 }
 
-export function CardContent({ card, roleLine }: CardContentProps) {
+export function CardContent({ card, roleLine, photoUri }: CardContentProps) {
   const { colors, fonts, fs, radii } = useTheme();
   const initial = card.display_name.trim().charAt(0).toUpperCase() || '?';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.photoBg, borderRadius: radii.r }]}>
-      {card.photo_url ? (
+      {photoUri ? (
         <Image
-          source={{ uri: card.photo_url }}
+          source={{ uri: photoUri }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           transition={150}

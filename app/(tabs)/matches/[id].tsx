@@ -8,6 +8,7 @@ import { Image } from 'expo-image';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PhotoLightbox } from '../../../features/shared/PhotoLightbox';
+import { useSignedPhotoUrl } from '../../../features/shared/photo';
 import { Screen } from '../../../theme/components';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { Chip, ContactLine } from '../../../features/matches/components';
@@ -48,6 +49,9 @@ export default function MatchDetailScreen() {
   );
   const { data: contacts, isLoading: contactsLoading } = useOtherContacts(otherProfileId);
   const { data: history, isLoading: historyLoading } = useOtherHistory(otherProfileId);
+  // photo_url is a storage path — the profile-photos bucket is private. Called
+  // here, above the early returns, so the hook order never changes.
+  const photoUri = useSignedPhotoUrl(match?.otherProfile.photoUrl);
 
   if (isLoading) {
     return (
@@ -77,14 +81,14 @@ export default function MatchDetailScreen() {
     <Screen style={styles.screen}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={[styles.photoHeader, { backgroundColor: colors.photoBg }]}>
-          {otherProfile.photoUrl ? (
+          {photoUri ? (
             <Pressable
               accessibilityRole="imagebutton"
               accessibilityLabel="View full photo"
               onPress={() => setPhotoOpen(true)}
               style={StyleSheet.absoluteFill}
             >
-              <Image source={{ uri: otherProfile.photoUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+              <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
             </Pressable>
           ) : (
             <View style={styles.monogramWrap}>
@@ -233,7 +237,7 @@ export default function MatchDetailScreen() {
         </View>
       </ScrollView>
 
-      <PhotoLightbox uri={otherProfile.photoUrl} visible={photoOpen} onClose={() => setPhotoOpen(false)} />
+      <PhotoLightbox uri={photoUri} visible={photoOpen} onClose={() => setPhotoOpen(false)} />
 
       <View style={[styles.footer, { backgroundColor: colors.scrim, borderTopColor: colors.line }]}>
         <Text

@@ -4,6 +4,7 @@
 import { Image } from 'expo-image';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useSignedPhotoUrls } from '../shared/photo';
 import { Bulbs, Confetti } from './Decor';
 import type { MatchFace } from './types';
 
@@ -16,14 +17,14 @@ type MatchOverlayProps = {
   onSeeMatches: () => void;
 };
 
-function Roundel({ face, label }: { face: MatchFace; label: string }) {
+function Roundel({ face, label, uri }: { face: MatchFace; label: string; uri: string | null }) {
   const { colors, fonts, fs } = useTheme();
   const initial = face.displayName.trim().charAt(0).toUpperCase() || '?';
   return (
     <View style={styles.roundelCol}>
       <View style={[styles.roundel, { borderColor: colors.brass, backgroundColor: colors.surface2 }]}>
-        {face.photoUrl ? (
-          <Image source={{ uri: face.photoUrl }} style={styles.roundelPhoto} contentFit="cover" />
+        {uri ? (
+          <Image source={{ uri }} style={styles.roundelPhoto} contentFit="cover" />
         ) : (
           <Text style={{ fontFamily: fonts.serif, fontSize: fs(31), lineHeight: fs(38), color: colors.brass }}>
             {initial}
@@ -49,6 +50,9 @@ export function MatchOverlay({
   onSeeMatches,
 }: MatchOverlayProps) {
   const { colors, fonts, fs, radii } = useTheme();
+  // Both faces in one signing call — the stored values are object paths.
+  const photos = useSignedPhotoUrls([me.photoUrl, them.photoUrl]);
+  const uriFor = (p: string | null) => (p ? (photos[p] ?? null) : null);
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onKeepSwiping}>
@@ -83,9 +87,9 @@ export function MatchOverlay({
           </View>
 
           <View style={styles.faces}>
-            <Roundel face={me} label="You" />
+            <Roundel face={me} label="You" uri={uriFor(me.photoUrl)} />
             <Text style={{ fontFamily: fonts.serifItalic, fontSize: fs(24), color: colors.ink2 }}>&amp;</Text>
-            <Roundel face={them} label={them.displayName} />
+            <Roundel face={them} label={them.displayName} uri={uriFor(them.photoUrl)} />
           </View>
 
           <Text

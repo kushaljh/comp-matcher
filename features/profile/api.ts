@@ -54,6 +54,10 @@ export async function updateProfile(
 // approach Supabase documents for Expo — RN's fetch/Blob does not reliably
 // upload raw bytes otherwise), and uploads it to the shared profile-photos
 // bucket under the caller's own folder (enforced by storage RLS).
+//
+// Returns the object PATH, not a URL: the bucket is private, so there is no
+// permanent fetchable address. Rendering goes through
+// features/shared/photo.ts's signing hook.
 export async function uploadProfilePhoto(userId: string, localUri: string): Promise<string> {
   const response = await fetch(localUri);
   const arrayBuffer = await response.arrayBuffer();
@@ -64,12 +68,12 @@ export async function uploadProfilePhoto(userId: string, localUri: string): Prom
     .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
   if (uploadError) throw uploadError;
 
-  const { data } = supabase.storage.from('profile-photos').getPublicUrl(path);
-  return data.publicUrl;
+  return path;
 }
 
-export async function updatePhotoUrl(profileId: string, photoUrl: string): Promise<void> {
-  const { error } = await supabase.from('profiles').update({ photo_url: photoUrl }).eq('id', profileId);
+/** `photoPath` is a storage object path — see uploadProfilePhoto. */
+export async function updatePhotoUrl(profileId: string, photoPath: string): Promise<void> {
+  const { error } = await supabase.from('profiles').update({ photo_url: photoPath }).eq('id', profileId);
   if (error) throw error;
 }
 

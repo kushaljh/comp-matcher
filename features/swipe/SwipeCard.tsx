@@ -31,6 +31,8 @@ export type SwipeCardHandle = {
 type SwipeCardProps = {
   card: DeckCard;
   roleLine: string;
+  /** Signed URL for the card's photo; see CardContent. */
+  photoUri: string | null;
   /** Card width — drives the fling threshold and the fly-off distance only. */
   width: number;
   // Called once, ~one fly-off duration after a swipe is committed (by gesture,
@@ -88,7 +90,7 @@ function Stamp({
 }
 
 export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
-  ({ card, roleLine, width, onSwiped, onTapMiddle }, ref) => {
+  ({ card, roleLine, photoUri, width, onSwiped, onTapMiddle }, ref) => {
     const { colors, radii, reduceMotion } = useTheme();
     const translateX = useSharedValue(0);
     const translateY = useSharedValue(0);
@@ -188,7 +190,7 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
             cardStyle,
           ]}
         >
-          <CardContent card={card} roleLine={roleLine} />
+          <CardContent card={card} roleLine={roleLine} photoUri={photoUri} />
           <Stamp label="Ask 'em" color={colors.brass} side="left" style={likeStampStyle} />
           <Stamp label="Sit out" color={colors.red} side="right" style={passStampStyle} />
         </Animated.View>

@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Screen, TextField } from '../../../theme/components';
 import { useTheme } from '../../../theme/ThemeProvider';
+import { useSignedPhotoUrl } from '../../../features/shared/photo';
 import { useIsAdmin } from '../../../features/admin/hooks';
 import { ContactsSection } from '../../../features/profile/components/ContactsSection';
 import { EntriesSection } from '../../../features/profile/components/EntriesSection';
@@ -30,6 +31,8 @@ export default function ProfileScreen() {
 
   const updateProfile = useUpdateProfile(profileId);
   const uploadPhoto = useUploadPhoto(profileId, userId ?? undefined);
+  // photo_url holds a storage path; the bucket is private.
+  const photoUri = useSignedPhotoUrl(profile?.photo_url);
 
   const [initialized, setInitialized] = useState(false);
   const [displayName, setDisplayName] = useState('');
@@ -131,8 +134,8 @@ export default function ProfileScreen() {
           <View style={styles.photoRow}>
             <Pressable onPress={pickPhoto} disabled={uploadPhoto.isPending}>
               <View style={[styles.photoTile, { borderColor: colors.brass, borderRadius: radii.rSm }]}>
-                {profile.photo_url ? (
-                  <Image source={{ uri: profile.photo_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                {photoUri ? (
+                  <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
                 ) : (
                   <View style={[styles.photoPlaceholder, { backgroundColor: colors.surface2 }]}>
                     <Text style={{ fontFamily: fonts.serif, fontSize: fs(30), color: colors.brass }}>

@@ -2,6 +2,7 @@
 // competition history) — the same operations scripts/verify-wp1.mjs exercises
 // against the live DB with the anon client.
 
+import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
 import type { Enums } from '../../lib/database.types';
 import { supabase } from '../../lib/supabase';
@@ -29,8 +30,24 @@ export function signInWithEmail(email: string, password: string) {
   return supabase.auth.signInWithPassword({ email, password });
 }
 
+// Where the emailed recovery link lands. On web that is the deployed/dev origin
+// plus the reset route; on native it is the app's `compmatcher://` scheme, which
+// expo-linking builds for us. Both must be allow-listed in Supabase Auth ->
+// URL Configuration or the link bounces to the project's Site URL instead.
+function resetRedirectTo(): string {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return `${window.location.origin}/reset-password`;
+  }
+  return Linking.createURL('/reset-password');
+}
+
 export function requestPasswordReset(email: string) {
-  return supabase.auth.resetPasswordForEmail(email);
+  return supabase.auth.resetPasswordForEmail(email, { redirectTo: resetRedirectTo() });
+}
+
+/** Finishes the flow once a recovery session is attached. */
+export function updatePassword(password: string) {
+  return supabase.auth.updateUser({ password });
 }
 
 export function signOut() {

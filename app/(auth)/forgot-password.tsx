@@ -32,9 +32,8 @@ export default function ForgotPasswordScreen() {
         </Text>
         {sent ? (
           <Text style={{ fontFamily: fonts.body, fontSize: fs(15), color: colors.ink2 }}>
-            If an account exists for {email.trim()}, a reset link is on its way. MVP note:
-            finishing the reset from that emailed link isn&apos;t wired up inside this app yet —
-            that&apos;s planned post-MVP.
+            If an account exists for {email.trim()}, a reset link is on its way. Open it on this
+            device and you&apos;ll land straight on a screen to choose a new password.
           </Text>
         ) : (
           <>

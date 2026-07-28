@@ -3,6 +3,8 @@
 // Redirect rules:
 //   no session                    -> (auth)/sign-in (including away from
 //                                    onboarding, which requires a session)
+//   session + recovering          -> (auth)/reset-password  (checked FIRST: a
+//                                    recovery link carries a real session)
 //   session, no profiles row      -> (auth)/onboarding
 //   session + profile             -> away from (auth) group (tabs)
 //
@@ -24,7 +26,7 @@ import { useSession } from './SessionProvider';
 import { useHasProfile } from './useHasProfile';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { session, initializing } = useSession();
+  const { session, initializing, recovering } = useSession();
   const segments = useSegments();
   const router = useRouter();
   const { data: hasProfile, isLoading: profileLoading } = useHasProfile();
@@ -40,6 +42,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   // so it must NOT be treated as a safe no-session destination — otherwise
   // signing out while on onboarding would never redirect back to sign-in.
   const inSignInFlow = inAuthGroup && !inOnboarding;
+  const inResetPassword = inAuthGroup && segmentList[1] === 'reset-password';
   const loading = initializing || (!!session && profileLoading);
 
   useEffect(() => {
@@ -47,6 +50,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
     if (!session) {
       if (!inSignInFlow) router.replace('/(auth)/sign-in');
+      return;
+    }
+
+    // A recovery link attaches a real session, so this check must come BEFORE
+    // the has-profile and in-auth-group rules below — otherwise the gate reads
+    // it as an ordinary sign-in and bounces the user into the tabs without
+    // ever letting them set a password.
+    if (recovering) {
+      if (!inResetPassword) router.replace('/(auth)/reset-password');
       return;
     }
 
@@ -60,7 +72,18 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     // it: they can be unchanged (e.g. false -> false) across a segments
     // change that still matters (e.g. "/" -> "/events"), which would
     // otherwise skip a needed re-evaluation.
-  }, [loading, session, hasProfile, inAuthGroup, inOnboarding, inSignInFlow, router, segments]);
+  }, [
+    loading,
+    session,
+    recovering,
+    hasProfile,
+    inAuthGroup,
+    inOnboarding,
+    inSignInFlow,
+    inResetPassword,
+    router,
+    segments,
+  ]);
 
   if (loading) {
     return <View style={{ flex: 1, backgroundColor: colors.cream }} />;

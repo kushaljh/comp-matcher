@@ -5,6 +5,8 @@ import { ReactNode, useMemo } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthGate } from '../features/auth/AuthGate';
 import { SessionProvider } from '../features/auth/SessionProvider';
+import { MAINTENANCE_MODE } from '../features/maintenance/config';
+import { MaintenanceScreen } from '../features/maintenance/MaintenanceScreen';
 import { queryClient } from '../lib/queryClient';
 import { ThemeProvider, useTheme } from '../theme/ThemeProvider';
 
@@ -36,6 +38,21 @@ function ThemedNavigation({ children }: { children: ReactNode }) {
 }
 
 export default function RootLayout() {
+  // Maintenance mode short-circuits the whole app: no router, no
+  // SessionProvider, no react-query — so every URL lands on the holding
+  // screen and the client makes no Supabase calls at all while we're down.
+  // ThemeProvider stays so the screen paints in the real palette and faces.
+  // Nothing below navigates, so the router never needing to mount is safe.
+  if (MAINTENANCE_MODE) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider>
+          <MaintenanceScreen />
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>

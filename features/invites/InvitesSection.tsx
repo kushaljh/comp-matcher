@@ -16,7 +16,9 @@ function InviteRowView({ invite }: { invite: InviteRow }) {
   const { colors, fonts, fs, radii } = useTheme();
   const [flash, setFlash] = useState<string | null>(null);
   const deleteInvite = useDeleteInvite();
-  const claimed = invite.redeemed_by != null;
+  // redeemed_at, not redeemed_by: the latter is ON DELETE SET NULL, so a
+  // code spent by someone who has since left would read as unused.
+  const claimed = invite.redeemed_at != null;
 
   async function handleShare() {
     try {

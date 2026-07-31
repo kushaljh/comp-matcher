@@ -633,6 +633,164 @@ begin
 end $$;
 reset role;
 
+-- ===========================================================================
+-- TEST 9 — the signup path, end to end through the auth.users trigger
+--
+--   GoTrue writes signUp()'s `options.data` verbatim into raw_user_meta_data
+--   and then inserts the row, so inserting into auth.users with that metadata
+--   shape exercises exactly the database half of a real signup. (The half
+--   this cannot reach — that GoTrue really does put options.data there, and
+--   that the before_user_created hook really is wired — is what
+--   scripts/verify-invites.mjs covers, over HTTP.)
+-- ===========================================================================
+insert into auth.users (id, aud, role, email, created_at, updated_at)
+values ('00000000-0000-4000-a000-0000000000c2','authenticated','authenticated','rls_host@test.local',now(),now());
+insert into public.profiles (id, user_id, display_name)
+values ('00000000-0000-4000-b000-0000000000c2','00000000-0000-4000-a000-0000000000c2','Test Host');
+
+insert into public.invites (code, created_by) values
+  ('RLSGOODAAA','00000000-0000-4000-a000-0000000000c2'),
+  ('RLSMIXEDBB','00000000-0000-4000-a000-0000000000c2'),
+  ('RLSLEAVERX','00000000-0000-4000-a000-0000000000c2');
+insert into public.invites (code, created_by, expires_at) values
+  ('RLSEXPIRED','00000000-0000-4000-a000-0000000000c2', now() - interval '1 day');
+
+do $$
+declare
+  blocked boolean;
+  n int;
+  r record;
+begin
+  -- 9a. A valid code admits exactly one person, attributed to the inviter,
+  --     and with NO invites of their own until an admin grants some.
+  insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+  values ('00000000-0000-4000-a000-0000000000c3','authenticated','authenticated','rls_guest@test.local',
+          '{"invite_code":"RLSGOODAAA"}'::jsonb, now(), now());
+
+  select * into r from public.app_members where user_id = '00000000-0000-4000-a000-0000000000c3';
+  if not found then raise exception 'TEST 9 FAIL: a coded signup got no membership'; end if;
+  if r.invited_by <> '00000000-0000-4000-a000-0000000000c2' then
+    raise exception 'TEST 9 FAIL: the new member was not attributed to their inviter';
+  end if;
+  if r.invite_quota <> 0 then
+    raise exception 'TEST 9 FAIL: a new member arrived able to invite (quota %)', r.invite_quota;
+  end if;
+
+  select * into r from public.invites where code = 'RLSGOODAAA';
+  if r.redeemed_by <> '00000000-0000-4000-a000-0000000000c3' or r.redeemed_at is null then
+    raise exception 'TEST 9 FAIL: the code was not consumed by the signup';
+  end if;
+
+  -- 9b. However the code was typed. People paste these out of messages.
+  insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+  values ('00000000-0000-4000-a000-0000000000c4','authenticated','authenticated','rls_mixed@test.local',
+          '{"invite_code":" rls-mixed bb "}'::jsonb, now(), now());
+  if not exists (select 1 from public.app_members where user_id='00000000-0000-4000-a000-0000000000c4') then
+    raise exception 'TEST 9 FAIL: a normalised code was rejected';
+  end if;
+
+  -- 9c. Unknown, blank and expired codes abort the whole insert — no orphan
+  --     auth user is left behind for someone to sign in with later.
+  blocked := false;
+  begin
+    insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+    values ('00000000-0000-4000-a000-0000000000c5','authenticated','authenticated','rls_bad@test.local',
+            '{"invite_code":"NOSUCHCODE"}'::jsonb, now(), now());
+  exception when others then blocked := true;
+  end;
+  if not blocked then raise exception 'TEST 9 FAIL: an unknown code created an account'; end if;
+  if exists (select 1 from auth.users where id='00000000-0000-4000-a000-0000000000c5') then
+    raise exception 'TEST 9 FAIL: the rejected account survived';
+  end if;
+
+  blocked := false;
+  begin
+    insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+    values ('00000000-0000-4000-a000-0000000000c6','authenticated','authenticated','rls_blank@test.local',
+            '{"invite_code":""}'::jsonb, now(), now());
+  exception when others then blocked := true;
+  end;
+  if not blocked then raise exception 'TEST 9 FAIL: a blank code created an account'; end if;
+
+  blocked := false;
+  begin
+    insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+    values ('00000000-0000-4000-a000-0000000000c7','authenticated','authenticated','rls_exp@test.local',
+            '{"invite_code":"RLSEXPIRED"}'::jsonb, now(), now());
+  exception when others then blocked := true;
+  end;
+  if not blocked then raise exception 'TEST 9 FAIL: an expired code created an account'; end if;
+  if (select redeemed_at from public.invites where code='RLSEXPIRED') is not null then
+    raise exception 'TEST 9 FAIL: an expired code was consumed on the way to being refused';
+  end if;
+
+  -- 9d. Reuse. This is also the outcome of two signups racing one code: the
+  --     consume is a conditional UPDATE, so the loser fails closed.
+  blocked := false;
+  begin
+    insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+    values ('00000000-0000-4000-a000-0000000000c8','authenticated','authenticated','rls_reuse@test.local',
+            '{"invite_code":"RLSGOODAAA"}'::jsonb, now(), now());
+  exception when others then blocked := true;
+  end;
+  if not blocked then raise exception 'TEST 9 FAIL: a spent code admitted a second person'; end if;
+
+  -- 9e. No invite_code key at all: the service-role path (fixtures, seeds,
+  --     auth.admin.createUser). Admitted, and no code is burnt for it.
+  select count(*) into n from public.invites where redeemed_at is null;
+  insert into auth.users (id, aud, role, email, created_at, updated_at)
+  values ('00000000-0000-4000-a000-0000000000c9','authenticated','authenticated','rls_svc@test.local',now(),now());
+  if not exists (select 1 from public.app_members where user_id='00000000-0000-4000-a000-0000000000c9') then
+    raise exception 'TEST 9 FAIL: service-role user creation got no membership';
+  end if;
+  if (select count(*) from public.invites where redeemed_at is null) <> n then
+    raise exception 'TEST 9 FAIL: a codeless signup consumed a code';
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 9f. REGRESSION: a spent code must stay spent after the redeemer leaves.
+--
+--     invites.redeemed_by is ON DELETE SET NULL, so deleting the account that
+--     used a code nulls it. Availability used to be tested on that column,
+--     which meant delete_my_account() — one tap, in Settings — silently
+--     reopened the code for anyone still holding it, months later, with the
+--     new signup attributed to nobody. Availability is now tested on
+--     redeemed_at, which nothing nulls.
+--     Fixed in 20260729160000_invite_single_use_fix.sql.
+-- ---------------------------------------------------------------------------
+insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+values ('00000000-0000-4000-a000-0000000000d2','authenticated','authenticated','rls_leaver@test.local',
+        '{"invite_code":"RLSLEAVERX"}'::jsonb, now(), now());
+
+delete from auth.users where id = '00000000-0000-4000-a000-0000000000d2';
+
+do $$
+declare blocked boolean := false; r record;
+begin
+  select * into r from public.invites where code = 'RLSLEAVERX';
+  if not found then raise exception 'TEST 9 FAIL: the invite left with the departing member'; end if;
+  if r.redeemed_at is null then
+    raise exception 'TEST 9 FAIL: redeemed_at was cleared, so nothing records that this code was used';
+  end if;
+
+  -- The door: the hook must still refuse it.
+  if public.hook_require_invite('{"user":{"user_metadata":{"invite_code":"RLSLEAVERX"}}}'::jsonb) -> 'error' is null then
+    raise exception 'TEST 9 FAIL: a code spent by a departed member is live again at the hook';
+  end if;
+
+  -- And the trigger, which is the half that actually admits people.
+  begin
+    insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+    values ('00000000-0000-4000-a000-0000000000d3','authenticated','authenticated','rls_second@test.local',
+            '{"invite_code":"RLSLEAVERX"}'::jsonb, now(), now());
+  exception when others then blocked := true;
+  end;
+  if not blocked then
+    raise exception 'TEST 9 FAIL: a code spent by a departed member admitted somebody new';
+  end if;
+end $$;
+
 rollback;
 
 \echo 'ALL RLS TESTS PASSED'

@@ -20,7 +20,9 @@ import { confirmAsync } from '../profile/confirm';
 // survives it, so the person stays a member either way.
 function DeleteInviteButton({ invite }: { invite: InviteRow }) {
   const deleteInvite = useDeleteInvite();
-  const claimed = invite.redeemed_by != null;
+  // redeemed_at, not redeemed_by: the latter is ON DELETE SET NULL, so it
+  // reads as 'never used' once the person who used it deletes their account.
+  const claimed = invite.redeemed_at != null;
 
   async function handleDelete() {
     const confirmed = await confirmAsync(
@@ -47,8 +49,10 @@ export function InvitesPanel() {
   const { data: invites, isLoading } = useAllInvites();
   const createInvite = useCreateInvite();
 
-  const outstanding = invites?.filter((i) => i.redeemed_by == null) ?? [];
-  const claimed = invites?.filter((i) => i.redeemed_by != null) ?? [];
+  // See the note in DeleteInviteButton: a spent code is one with a
+  // redeemed_at, whether or not the account that spent it still exists.
+  const outstanding = invites?.filter((i) => i.redeemed_at == null) ?? [];
+  const claimed = invites?.filter((i) => i.redeemed_at != null) ?? [];
 
   return (
     <Card style={styles.card}>
@@ -83,13 +87,13 @@ export function InvitesPanel() {
           <View style={styles.rowMain}>
             <Text style={styles.code}>{invite.code}</Text>
             <Text style={styles.meta}>
-              {invite.redeemed_by
-                ? `Claimed ${new Date(invite.redeemed_at as string).toLocaleDateString()}`
+              {invite.redeemed_at
+                ? `Claimed ${new Date(invite.redeemed_at).toLocaleDateString()}`
                 : `Created ${new Date(invite.created_at).toLocaleDateString()}`}
             </Text>
           </View>
           <View style={styles.rowActions}>
-            {invite.redeemed_by ? null : (
+            {invite.redeemed_at ? null : (
               <Button title="Share" variant="secondary" onPress={() => shareInvite(invite.code)} />
             )}
             <DeleteInviteButton invite={invite} />

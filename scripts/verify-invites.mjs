@@ -1,29 +1,27 @@
 // ============================================================================
-// Comp Matcher — invite-only live verification
+// Comp Matcher — invite-only live verification (over HTTP)
 // ============================================================================
-// Proves the invite gate against the LIVE hosted Supabase project using the
-// ANON client, so RLS and the before_user_created hook are actually exercised
-// rather than bypassed. Asserts, in order:
+// supabase/tests/rls_tests.sql covers the database half of the invite flow
+// thoroughly, and it does so by inserting into auth.users with the metadata
+// shape GoTrue writes. Two things it CANNOT reach, and this script exists for:
 //
-//   1. signUp WITHOUT a code is rejected      (hook; requires the hook to be
-//                                              enabled in the dashboard — the
-//                                              script says so if it is not)
-//   2. signUp with a bogus code is rejected   (hook)
-//   3. signUp with a real code succeeds, the code is consumed, and the new
-//      user has an app_members row            (auth.users trigger)
-//   4. that same code cannot be reused        (single-use)
-//   5. a member's 4th create_invite() is refused (quota)
-//   6. an uninvited session cannot insert a profile (profiles_insert — the
-//      gate that holds even with the hook off)
+//   1. That a real supabase.auth.signUp() actually carries options.data
+//      through to user_metadata, where hook_require_invite() reads it. Every
+//      SQL test assumes this; only an HTTP signup proves it.
+//   2. That the before_user_created hook is actually WIRED UP on the hosted
+//      project. It is a dashboard setting, invisible to both the repo and the
+//      database. If it is off, check 2 below fails loudly and tells you so.
 //
-// Everything it creates is deleted at the end.
+// Everything runs against the LIVE project through the ANON client, so RLS and
+// the auth server are genuinely in the path. Throwaway accounts are created
+// under @verify.test and deleted at the end.
 //
 // Usage: node scripts/verify-invites.mjs   (run from the worktree root)
 // Needs (from .env at repo root, or the environment):
 //   EXPO_PUBLIC_SUPABASE_URL
 //   EXPO_PUBLIC_SUPABASE_ANON_KEY
-//   SUPABASE_SERVICE_ROLE_KEY   (server-only; bypasses RLS — used to mint the
-//                                seed code and to delete the throwaway users)
+//   SUPABASE_SERVICE_ROLE_KEY   (server-only; bypasses RLS — used to seed the
+//                                 codes and to delete the throwaway accounts)
 // ============================================================================
 
 import { readFileSync } from 'node:fs';
@@ -52,174 +50,183 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
 
 const clientOpts = { auth: { autoRefreshToken: false, persistSession: false } };
 const admin = createClient(SUPABASE_URL, SERVICE_KEY, clientOpts);
-const anon = createClient(SUPABASE_URL, ANON_KEY, clientOpts);
+const anon = () => createClient(SUPABASE_URL, ANON_KEY, clientOpts);
 
 const PASSWORD = 'InviteVerify123!';
 const stamp = Date.now();
-const EMAIL_INVITER = `invite-verify-host-${stamp}@verify.test`;
-const EMAIL_GUEST = `invite-verify-guest-${stamp}@verify.test`;
-const EMAIL_NOCODE = `invite-verify-nocode-${stamp}@verify.test`;
-const EMAIL_BADCODE = `invite-verify-badcode-${stamp}@verify.test`;
+const email = (who) => `invite-verify-${who}-${stamp}@verify.test`;
 
-const created = [];   // user ids to clean up
-let hookEnabled = true;
+const createdUsers = [];
+let failures = 0;
 
 function pass(label) { console.log(`  ✓ ${label}`); }
 function fail(label, detail) {
-  console.error(`  ✗ ${label}${detail ? ` — ${detail}` : ''}`);
-  process.exitCode = 1;
+  failures++;
+  console.error(`  ✗ ${label}${detail ? `\n      ${detail}` : ''}`);
+}
+
+async function seedCode(code, ownerId, extra = {}) {
+  const { error } = await admin.from('invites').insert({ code, created_by: ownerId, ...extra });
+  if (error) throw error;
+  return code;
+}
+
+// signUp leaves an auth user behind even on some failures; track whatever
+// exists under this run's stamp so cleanup catches it either way.
+async function trackByEmail(addr) {
+  const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+  const found = data?.users?.find((u) => u.email === addr);
+  if (found && !createdUsers.includes(found.id)) createdUsers.push(found.id);
+  return found ?? null;
 }
 
 async function cleanup() {
-  for (const id of created) {
-    await admin.auth.admin.deleteUser(id).catch(() => {});
-  }
-  await admin.from('invites').delete().like('code', 'VERIFY%');
+  for (const id of createdUsers) await admin.auth.admin.deleteUser(id).catch(() => {});
+  await admin.from('invites').delete().like('code', `VFY${stamp}%`).catch(() => {});
+  await admin.from('invites').delete().like('code', 'VFY%').catch(() => {});
 }
 
 try {
-  console.log('Invite-only verification\n');
+  console.log('\nInvite-only verification (live, over HTTP)\n');
 
-  // --- setup: an inviter (created service-side, so no code needed) ---------
-  const { data: inviterData, error: inviterErr } = await admin.auth.admin.createUser({
-    email: EMAIL_INVITER,
-    password: PASSWORD,
-    email_confirm: true,
+  // --- host account, created service-side (the codeless path) --------------
+  const { data: hostData, error: hostErr } = await admin.auth.admin.createUser({
+    email: email('host'), password: PASSWORD, email_confirm: true,
   });
-  if (inviterErr) throw inviterErr;
-  created.push(inviterData.user.id);
+  if (hostErr) throw hostErr;
+  createdUsers.push(hostData.user.id);
 
-  // The trigger's codeless branch should have made them a member already.
-  const { data: memberRow } = await admin
-    .from('app_members')
-    .select('user_id')
-    .eq('user_id', inviterData.user.id)
-    .maybeSingle();
-  if (memberRow) pass('service-role user creation still works and grants membership');
-  else fail('service-role user creation did not grant membership');
-
-  // --- 1. codeless signup is rejected --------------------------------------
-  const { error: noCodeErr } = await anon.auth.signUp({
-    email: EMAIL_NOCODE,
-    password: PASSWORD,
-    options: { data: { invite_code: '' } },
-  });
-  if (noCodeErr) {
-    pass(`signup with no code rejected (${noCodeErr.message})`);
-  } else {
-    hookEnabled = false;
-    const { data: leaked } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
-    const u = leaked.users.find((x) => x.email === EMAIL_NOCODE);
-    if (u) created.push(u.id);
-    fail(
-      'signup with no code was ALLOWED',
-      'the before_user_created hook is not enabled — turn it on in Dashboard → Authentication → Hooks (pg-functions://postgres/public/hook_require_invite)'
-    );
+  const { data: hostMember } = await admin
+    .from('app_members').select('user_id, invite_quota')
+    .eq('user_id', hostData.user.id).maybeSingle();
+  if (hostMember) pass('service-role user creation still works, and grants membership');
+  else fail('service-role user creation did not grant membership',
+            'the auth.users trigger’s codeless branch is what keeps the fixture scripts working');
+  if (hostMember && hostMember.invite_quota === 0) {
+    pass('a new member arrives with no invites to give (quota 0)');
+  } else if (hostMember) {
+    fail(`a new member arrived with quota ${hostMember.invite_quota}`, 'expected 0 — inviting is granted, not given');
   }
 
-  // --- 2. bogus code is rejected -------------------------------------------
-  const { error: badCodeErr } = await anon.auth.signUp({
-    email: EMAIL_BADCODE,
-    password: PASSWORD,
-    options: { data: { invite_code: 'NOTAREALCODE' } },
+  const GOOD = await seedCode(`VFY${stamp}A`.slice(0, 12).toUpperCase(), hostData.user.id);
+  const SPENT = await seedCode(`VFY${stamp}B`.slice(0, 12).toUpperCase(), hostData.user.id);
+  const EXPIRED = await seedCode(`VFY${stamp}C`.slice(0, 12).toUpperCase(), hostData.user.id, {
+    expires_at: new Date(Date.now() - 60_000).toISOString(),
   });
-  if (badCodeErr) pass('signup with an unknown code rejected');
-  else {
-    const { data: leaked } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
-    const u = leaked.users.find((x) => x.email === EMAIL_BADCODE);
-    if (u) created.push(u.id);
-    fail('signup with an unknown code was ALLOWED');
-  }
 
-  // --- 3. a real code lets exactly one person in ---------------------------
-  const CODE = `VERIFY${stamp}`.slice(0, 12).toUpperCase();
-  const { error: seedErr } = await admin
-    .from('invites')
-    .insert({ code: CODE, created_by: inviterData.user.id });
-  if (seedErr) throw seedErr;
-
-  const { data: guestData, error: guestErr } = await anon.auth.signUp({
-    email: EMAIL_GUEST,
+  // --- 1. THE POINT OF THIS SCRIPT ----------------------------------------
+  // A real signUp, with the code in options.data exactly as features/auth/api.ts
+  // sends it. If this passes, options.data really does reach user_metadata and
+  // raw_user_meta_data, which every SQL test takes on faith.
+  const guestEmail = email('guest');
+  const { data: guestData, error: guestErr } = await anon().auth.signUp({
+    email: guestEmail,
     password: PASSWORD,
-    options: { data: { invite_code: CODE.toLowerCase() } },   // also tests normalisation
+    options: { data: { invite_code: GOOD.toLowerCase() } },   // also tests normalisation
   });
+  await trackByEmail(guestEmail);
+
   if (guestErr) {
-    fail('signup with a valid code was rejected', guestErr.message);
+    fail('a real signUp with a valid code was rejected', guestErr.message);
   } else {
-    created.push(guestData.user.id);
-    pass('signup with a valid code succeeded (lower-case code matched)');
+    pass('a real signUp carries the code through to the database (lower-case matched)');
 
     const { data: consumed } = await admin
-      .from('invites')
-      .select('redeemed_by, redeemed_at')
-      .eq('code', CODE)
-      .single();
+      .from('invites').select('redeemed_by, redeemed_at').eq('code', GOOD).single();
     if (consumed?.redeemed_by === guestData.user.id && consumed.redeemed_at) {
-      pass('the code was consumed by the new user');
+      pass('the code was consumed, atomically with the signup');
     } else {
-      fail('the code was not marked redeemed by the new user');
+      fail('the code was not marked redeemed by the new account');
     }
 
     const { data: guestMember } = await admin
-      .from('app_members')
-      .select('user_id, invited_by')
-      .eq('user_id', guestData.user.id)
-      .maybeSingle();
-    if (guestMember?.invited_by === inviterData.user.id) {
-      pass('membership recorded, attributed to the inviter');
-    } else {
-      fail('membership row missing or not attributed to the inviter');
-    }
+      .from('app_members').select('user_id, invited_by').eq('user_id', guestData.user.id).maybeSingle();
+    if (guestMember?.invited_by === hostData.user.id) pass('membership recorded, attributed to the inviter');
+    else fail('membership row missing, or not attributed to the inviter');
   }
 
-  // --- 4. the code cannot be reused ----------------------------------------
-  const { error: reuseErr } = await anon.auth.signUp({
-    email: `invite-verify-reuse-${stamp}@verify.test`,
-    password: PASSWORD,
-    options: { data: { invite_code: CODE } },
+  // --- 2. THE HOOK --------------------------------------------------------
+  // A codeless signUp. The database trigger alone would already refuse this,
+  // but with an ugly "Database error saving new user"; the hook is what turns
+  // it into the message the sign-up screen shows. Distinguish the two, because
+  // "rejected" alone would hide a disabled hook.
+  const noCodeEmail = email('nocode');
+  const { error: noCodeErr } = await anon().auth.signUp({
+    email: noCodeEmail, password: PASSWORD, options: { data: { invite_code: '' } },
   });
-  if (reuseErr) pass('a consumed code cannot be reused');
-  else fail('a consumed code was accepted a second time');
+  await trackByEmail(noCodeEmail);
 
-  // --- 5. the quota stops the 4th code -------------------------------------
-  const guestSession = createClient(SUPABASE_URL, ANON_KEY, clientOpts);
-  const { error: signInErr } = await guestSession.auth.signInWithPassword({
-    email: EMAIL_GUEST,
-    password: PASSWORD,
-  });
-  if (signInErr) {
-    console.log(`  · skipping quota check (guest could not sign in: ${signInErr.message})`);
+  if (!noCodeErr) {
+    fail('a signUp with no code was ACCEPTED',
+         'both the hook AND the auth.users trigger failed to refuse it — this is the gate wide open');
+  } else if (/invite only/i.test(noCodeErr.message)) {
+    pass('a codeless signUp is refused at the door, with the hook’s message');
   } else {
-    let quotaBlocked = false;
-    for (let i = 0; i < 4; i++) {
-      const { error } = await guestSession.rpc('create_invite');
-      if (error) { quotaBlocked = i === 3; break; }
-    }
-    if (quotaBlocked) pass('create_invite() refuses the 4th code (quota of 3)');
-    else fail('create_invite() did not enforce the quota');
-
-    const { data: remaining } = await guestSession.rpc('my_invites_remaining');
-    if (remaining === 0) pass('my_invites_remaining() reports 0 left');
-    else fail(`my_invites_remaining() reported ${remaining}, expected 0`);
+    fail('a codeless signUp was refused, but by the database trigger rather than the hook',
+         `got: "${noCodeErr.message}"\n      The gate holds, but the message is unreadable. Enable the hook:\n      Dashboard → Authentication → Hooks → Before User Created →\n      pg-functions://postgres/public/hook_require_invite`);
   }
 
-  // --- 6. an uninvited session cannot create a profile ---------------------
-  // Strip the guest's membership to simulate a session that never had one:
-  // this is the gate that holds even if the hook is off.
-  await admin.from('app_members').delete().eq('user_id', guestData?.user.id ?? '');
-  if (!signInErr) {
-    const { error: profileErr } = await guestSession
-      .from('profiles')
-      .insert({ user_id: guestData.user.id, display_name: 'Should not exist' });
-    if (profileErr) pass('an uninvited session cannot insert a profile (RLS)');
+  // --- 3. bad, spent and expired codes ------------------------------------
+  for (const [label, code] of [['an unknown', 'NOTAREALCODE'], ['an expired', EXPIRED], ['an already-used', GOOD]]) {
+    const addr = email(`bad-${label.replace(/\W/g, '')}`);
+    const { error } = await anon().auth.signUp({
+      email: addr, password: PASSWORD, options: { data: { invite_code: code } },
+    });
+    await trackByEmail(addr);
+    if (error) pass(`${label} code is refused`);
+    else fail(`${label} code was ACCEPTED`);
+  }
+
+  // --- 4. REGRESSION: a spent code must stay spent after the redeemer leaves
+  // invites.redeemed_by is ON DELETE SET NULL. Availability is tested on
+  // redeemed_at for exactly this reason; if that ever regresses, deleting an
+  // account silently reopens the code it was used with.
+  const leaverEmail = email('leaver');
+  const { data: leaverData, error: leaverErr } = await anon().auth.signUp({
+    email: leaverEmail, password: PASSWORD, options: { data: { invite_code: SPENT } },
+  });
+  await trackByEmail(leaverEmail);
+  if (leaverErr) {
+    fail('could not set up the departed-redeemer check', leaverErr.message);
+  } else {
+    await admin.auth.admin.deleteUser(leaverData.user.id);
+    const i = createdUsers.indexOf(leaverData.user.id);
+    if (i >= 0) createdUsers.splice(i, 1);
+
+    const reuseEmail = email('afterleaver');
+    const { error: reuseErr } = await anon().auth.signUp({
+      email: reuseEmail, password: PASSWORD, options: { data: { invite_code: SPENT } },
+    });
+    await trackByEmail(reuseEmail);
+    if (reuseErr) pass('a code stays spent after the account that used it is deleted');
+    else fail('a spent code came back to life when its redeemer deleted their account',
+              'availability must be tested on redeemed_at, not redeemed_by');
+  }
+
+  // --- 5. the quota is a grant, and an uninvited session is inert ----------
+  const solo = anon();
+  const { error: signInErr } = await solo.auth.signInWithPassword({ email: guestEmail, password: PASSWORD });
+  if (signInErr) {
+    console.log(`  · skipped the quota checks (could not sign in: ${signInErr.message})`);
+  } else {
+    const { error: mintErr } = await solo.rpc('create_invite');
+    if (mintErr) pass('a member with no granted quota cannot mint a code');
+    else fail('a member minted a code without being granted any');
+
+    const { data: remaining } = await solo.rpc('my_invites_remaining');
+    if (remaining === 0) pass('my_invites_remaining() reports 0 for an ungranted member');
+    else fail(`my_invites_remaining() reported ${remaining}, expected 0`);
+
+    // Strip their membership: this is the gate that holds even with the hook off.
+    await admin.from('app_members').delete().eq('user_id', guestData.user.id);
+    const { error: profileErr } = await solo
+      .from('profiles').insert({ user_id: guestData.user.id, display_name: 'Should not exist' });
+    if (profileErr) pass('an uninvited session cannot create a profile (RLS)');
     else fail('an uninvited session created a profile — profiles_insert is not gating');
   }
 
-  console.log(
-    process.exitCode === 1
-      ? '\nSome checks FAILED.'
-      : `\nAll invite checks passed${hookEnabled ? '' : ' (hook disabled)'}.`
-  );
+  console.log(failures === 0 ? '\nAll invite checks passed.\n' : `\n${failures} check(s) FAILED.\n`);
+  process.exitCode = failures === 0 ? 0 : 1;
 } catch (err) {
   console.error(`\nVerification error: ${err.message || err}`);
   process.exitCode = 1;

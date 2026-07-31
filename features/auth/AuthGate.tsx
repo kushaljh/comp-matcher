@@ -120,7 +120,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   // Sits after the redirect rules above so a suspended dancer mid-password-
   // recovery still gets to finish setting their password.
   if (session && !recovering && hasProfile && suspendedAt) {
-    return <SuspendedScreen since={suspendedAt} />;
+    return <SuspendedScreen />;
   }
 
   return <>{children}</>;

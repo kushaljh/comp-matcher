@@ -3,13 +3,18 @@
 // RLS is what actually enforces suspension; this exists so the experience is an
 // explanation rather than a puzzle — empty decks and silently-failing swipes
 // with no reason given.
+//
+// No date: a suspended dancer knows when it happened, and the exact timestamp
+// read as bureaucratic rather than helpful. The admin log keeps the record
+// (who, when, and why) for the people who actually need it.
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SUPPORT_EMAIL } from '../support/contact';
 import { useSignOut } from '../profile/hooks';
 import { Screen } from '../../theme/components';
 import { useTheme } from '../../theme/ThemeProvider';
 
-export function SuspendedScreen({ since }: { since: string }) {
+export function SuspendedScreen() {
   const { colors, fonts, fs, radii } = useTheme();
   const signOut = useSignOut();
 
@@ -51,11 +56,13 @@ export function SuspendedScreen({ since }: { since: string }) {
             maxWidth: 330,
           }}
         >
-          An organiser suspended this account on {new Date(since).toLocaleDateString()}. You
-          won&apos;t appear in anyone&apos;s deck and can&apos;t pair up while that stands.
+          An admin suspended this account. You won&apos;t appear in anyone&apos;s deck and
+          can&apos;t pair up while that stands.
           {'\n\n'}
           Nothing has been deleted — your entries and pairings are still here if the suspension is
-          lifted. Get in touch with the organisers if you think this is a mistake.
+          lifted.
+          {'\n\n'}
+          If you think this is a mistake, email {SUPPORT_EMAIL}.
         </Text>
 
         <Pressable

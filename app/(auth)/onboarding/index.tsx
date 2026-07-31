@@ -14,6 +14,11 @@ import type { ContactPlatform } from '../../../features/auth/api';
 import { submitOnboarding } from '../../../features/auth/api';
 import { CONTACT_PLATFORMS, PLATFORM_LABELS } from '../../../features/auth/constants';
 import { validateContact } from '../../../features/profile/contactValidation';
+import {
+  contactDisplayValue,
+  contactFieldProps,
+  liveContactError,
+} from '../../../features/profile/contactField';
 import { ValuesField } from '../../../features/auth/ValuesField';
 import { useSession } from '../../../features/auth/SessionProvider';
 import { hasProfileQueryKey } from '../../../features/auth/useHasProfile';
@@ -21,7 +26,9 @@ import { Button, Card, Screen, TextField } from '../../../theme/components';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { radii, spacing } from '../../../theme/tokens';
 
-type ContactDraft = { platform: ContactPlatform; handle: string };
+// `touched` rides on the row rather than in a parallel array so that removing a
+// contact can't leave the flags pointing at the wrong rows.
+type ContactDraft = { platform: ContactPlatform; handle: string; touched: boolean };
 type HistoryDraft = { event_name: string; year: string; contest_name: string; placement: string };
 
 function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
@@ -68,7 +75,7 @@ export default function OnboardingScreen() {
   const [stateRegion, setStateRegion] = useState('');
   const [country, setCountry] = useState('');
 
-  const [contacts, setContacts] = useState<ContactDraft[]>([{ platform: 'instagram', handle: '' }]);
+  const [contacts, setContacts] = useState<ContactDraft[]>([{ platform: 'instagram', handle: '', touched: false }]);
   const [history, setHistory] = useState<HistoryDraft[]>([]);
 
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -101,8 +108,28 @@ export default function OnboardingScreen() {
   function updateContact(index: number, patch: Partial<ContactDraft>) {
     setContacts((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
   }
+  // Phone numbers are regrouped as they're typed; every other platform is left
+  // exactly as entered. See features/profile/contactField.ts.
+  function changeContactHandle(index: number, text: string) {
+    setContacts((prev) =>
+      prev.map((c, i) =>
+        i === index ? { ...c, handle: contactDisplayValue(c.platform, text) } : c
+      )
+    );
+  }
+  // Switching platform changes which rules apply, so the row goes back to
+  // untouched rather than carrying a complaint raised under the old ones.
+  function changeContactPlatform(index: number, platform: ContactPlatform) {
+    setContacts((prev) =>
+      prev.map((c, i) =>
+        i === index
+          ? { ...c, platform, handle: contactDisplayValue(platform, c.handle), touched: false }
+          : c
+      )
+    );
+  }
   function addContact() {
-    setContacts((prev) => [...prev, { platform: 'instagram', handle: '' }]);
+    setContacts((prev) => [...prev, { platform: 'instagram', handle: '', touched: false }]);
   }
   function removeContact(index: number) {
     setContacts((prev) => prev.filter((_, i) => i !== index));
@@ -122,17 +149,21 @@ export default function OnboardingScreen() {
 
   // Validate each filled row so the message appears under the field the user is
   // typing in, rather than as one submit-time error naming none of them.
-  const contactErrors = contacts.map((c) => {
-    if (!c.handle.trim()) return null;
-    const result = validateContact(c.platform, c.handle);
-    return result.ok ? null : result.error;
-  });
-  const hasContactError = contactErrors.some(Boolean);
+  //
+  // `touched` gates only whether the message is ON SCREEN yet — validity itself
+  // is computed for every filled row. Gating the submit check on touched too
+  // would let a row nobody has left through unvalidated.
+  const contactValidity = contacts.map((c) => liveContactError(c.platform, c.handle));
+  const contactErrors = contacts.map((c, i) => (c.touched ? contactValidity[i] : null));
+  const hasContactError = contactValidity.some(Boolean);
 
   const missing: string[] = [];
   if (!photoUri) missing.push('a profile photo');
   if (!displayName.trim()) missing.push('a display name');
   if (filledContacts.length === 0) missing.push('at least one contact');
+  // Without this the button can sit disabled over a row whose error hasn't been
+  // revealed yet, with nothing on screen saying why.
+  if (hasContactError) missing.push('a valid contact');
 
   const canSubmit = missing.length === 0 && !hasContactError && !submitting;
 
@@ -275,17 +306,18 @@ export default function OnboardingScreen() {
                     key={p}
                     label={PLATFORM_LABELS[p]}
                     selected={contact.platform === p}
-                    onPress={() => updateContact(index, { platform: p })}
+                    onPress={() => changeContactPlatform(index, p)}
                   />
                 ))}
               </View>
               <View style={styles.rowFields}>
                 <TextField
                   value={contact.handle}
-                  onChangeText={(handle) => updateContact(index, { handle })}
+                  onChangeText={(handle) => changeContactHandle(index, handle)}
+                  onBlur={() => updateContact(index, { touched: true })}
                   placeholder="Handle, number, or address"
                   style={styles.flexInput}
-                  autoCapitalize="none"
+                  {...contactFieldProps(contact.platform)}
                 />
                 {contacts.length > 1 ? (
                   <Pressable onPress={() => removeContact(index)}>

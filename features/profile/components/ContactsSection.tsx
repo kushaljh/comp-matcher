@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { TextField } from '../../../theme/components';
 import { validateContact } from '../contactValidation';
+import { contactDisplayValue, contactFieldProps, liveContactError } from '../contactField';
 import { useTheme } from '../../../theme/ThemeProvider';
 import type { Enums } from '../../../lib/database.types';
 import {
@@ -46,30 +47,49 @@ export function ContactsSection({ profileId }: { profileId: string | undefined }
   const [newPlatform, setNewPlatform] = useState<Enums<'contact_platform'> | null>(null);
   const [newHandle, setNewHandle] = useState('');
   const [newError, setNewError] = useState<string | null>(null);
+  // "Touched" is what keeps validation from nagging mid-word: nothing is
+  // flagged until the field has been left once, and after that the error
+  // tracks every keystroke so a correction clears it as soon as it lands.
+  const [editTouched, setEditTouched] = useState(false);
+  const [newTouched, setNewTouched] = useState(false);
 
   const contactList = contacts ?? [];
   const usedPlatforms = new Set(contactList.map((c) => c.platform));
   const availablePlatforms = ALL_PLATFORMS.filter((p) => !usedPlatforms.has(p));
   const canDelete = contactList.length > 1;
 
+  const editingContact = contactList.find((c) => c.id === editingId);
+
   const startEdit = (id: string, currentHandle: string) => {
     setEditingId(id);
     setEditHandle(currentHandle);
     setEditError(null);
+    setEditTouched(false);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditError(null);
+    setEditTouched(false);
+  };
+
+  const changeEditHandle = (text: string) => {
+    const next = contactDisplayValue(editingContact?.platform, text);
+    setEditHandle(next);
+    if (editTouched) setEditError(liveContactError(editingContact?.platform, next));
+  };
+
+  const blurEditHandle = () => {
+    setEditTouched(true);
+    setEditError(liveContactError(editingContact?.platform, editHandle));
   };
 
   // Edits are validated too. They previously weren't checked at all beyond
   // "not empty", so a good handle could be replaced with a broken one.
   const saveEdit = () => {
-    if (!editingId) return;
-    const contact = contactList.find((c) => c.id === editingId);
-    if (!contact) return;
-    const result = validateContact(contact.platform, editHandle);
+    if (!editingId || !editingContact) return;
+    setEditTouched(true);
+    const result = validateContact(editingContact.platform, editHandle);
     if (!result.ok) {
       setEditError(result.error);
       return;
@@ -87,10 +107,32 @@ export function ContactsSection({ profileId }: { profileId: string | undefined }
     setNewPlatform(null);
     setNewHandle('');
     setNewError(null);
+    setNewTouched(false);
+  };
+
+  // Switching platform mid-entry changes which rules apply, so a complaint
+  // raised under the old one is stale — drop it and start the field fresh.
+  const selectPlatform = (platform: Enums<'contact_platform'>) => {
+    setNewPlatform(platform);
+    setNewError(null);
+    setNewTouched(false);
+    setNewHandle((current) => contactDisplayValue(platform, current));
+  };
+
+  const changeNewHandle = (text: string) => {
+    const next = contactDisplayValue(newPlatform, text);
+    setNewHandle(next);
+    if (newTouched) setNewError(liveContactError(newPlatform, next));
+  };
+
+  const blurNewHandle = () => {
+    setNewTouched(true);
+    setNewError(liveContactError(newPlatform, newHandle));
   };
 
   const submitNewContact = () => {
     if (!newPlatform) return;
+    setNewTouched(true);
     const result = validateContact(newPlatform, newHandle);
     if (!result.ok) {
       setNewError(result.error);
@@ -141,7 +183,14 @@ export function ContactsSection({ profileId }: { profileId: string | undefined }
           </Text>
           {editingId === contact.id ? (
             <View style={styles.editRow}>
-              <TextField style={styles.editInput} value={editHandle} onChangeText={setEditHandle} autoFocus />
+              <TextField
+                style={styles.editInput}
+                value={editHandle}
+                onChangeText={changeEditHandle}
+                onBlur={blurEditHandle}
+                autoFocus
+                {...contactFieldProps(contact.platform)}
+              />
               <Pressable style={styles.smallButton} onPress={saveEdit}>
                 <Text style={smallButtonText}>Save</Text>
               </Pressable>
@@ -191,7 +240,7 @@ export function ContactsSection({ profileId }: { profileId: string | undefined }
                       backgroundColor: selected ? colors.brass : 'transparent',
                     },
                   ]}
-                  onPress={() => setNewPlatform(p)}
+                  onPress={() => selectPlatform(p)}
                 >
                   <Text
                     style={{
@@ -214,7 +263,9 @@ export function ContactsSection({ profileId }: { profileId: string | undefined }
                 style={styles.editInput}
                 placeholder="Handle / number / address"
                 value={newHandle}
-                onChangeText={setNewHandle}
+                onChangeText={changeNewHandle}
+                onBlur={blurNewHandle}
+                {...contactFieldProps(newPlatform)}
               />
               <Pressable style={styles.smallButton} onPress={submitNewContact}>
                 <Text style={smallButtonText}>Add contact</Text>

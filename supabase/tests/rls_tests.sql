@@ -324,6 +324,12 @@ end $$;
 reset role;
 
 -- 7c. create_invite() respects the quota, and the codes belong to the caller.
+--     Members start at quota 0 since 20260729140000_admin_panel.sql — inviting
+--     is granted, not given — so E is granted 3 first. TEST 8 covers the
+--     ungranted case and the admin grant path itself.
+update public.app_members set invite_quota = 3
+ where user_id = '00000000-0000-4000-a000-0000000000e1';
+
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000e1","role":"authenticated"}', true);
 set local role authenticated;
 do $$
@@ -491,6 +497,141 @@ begin
   if r.invite_id is not null then raise exception 'TEST 7 FAIL: app_members.invite_id should be null after the invite is deleted'; end if;
   if r.invited_by is null then raise exception 'TEST 7 FAIL: invited_by attribution was lost'; end if;
 end $$;
+
+-- ===========================================================================
+-- TEST 8 — admin panel: vouching gate, roster visibility, audit trail
+--   A is still an admin from 7g. E is an ordinary member.
+-- ===========================================================================
+
+-- 8a. A new member cannot invite anyone until an admin says so.
+do $$
+declare q int;
+begin
+  select invite_quota into q from public.app_members
+   where user_id = '00000000-0000-4000-a000-0000000000f1';
+  if q <> 0 then raise exception 'TEST 8 FAIL: a new member started with % invites, expected 0', q; end if;
+end $$;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000f1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  if public.my_invites_remaining() <> 0 then
+    raise exception 'TEST 8 FAIL: an ungranted member has invites to give';
+  end if;
+
+  begin
+    perform public.create_invite();
+    raise exception 'TEST 8 FAIL: an ungranted member minted an invite';
+  exception when check_violation then
+    null;  -- expected
+  end;
+end $$;
+reset role;
+
+-- 8b. Only an admin may grant, read the roster, or read the overview.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000f1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare n int;
+begin
+  begin
+    perform public.admin_set_invite_quota(
+      (select id from public.profiles where user_id = '00000000-0000-4000-a000-0000000000f1'), 5);
+    raise exception 'TEST 8 FAIL: a non-admin granted themselves invites';
+  exception when insufficient_privilege then null;
+  end;
+
+  begin
+    perform public.admin_dancer_roster();
+    raise exception 'TEST 8 FAIL: a non-admin read the roster';
+  exception when insufficient_privilege then null;
+  end;
+
+  begin
+    perform public.admin_overview();
+    raise exception 'TEST 8 FAIL: a non-admin read the overview';
+  exception when insufficient_privilege then null;
+  end;
+
+  select count(*) into n from public.admin_actions;
+  if n <> 0 then raise exception 'TEST 8 FAIL: a non-admin saw % audit rows', n; end if;
+end $$;
+reset role;
+
+-- 8c. The grant works, is clamped, and lands in the log — and the roster
+--     carries the invite trail the admin panel shows.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000a1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare
+  v_target uuid := (select id from public.profiles where user_id = '00000000-0000-4000-a000-0000000000f1');
+  v_quota  int;
+  r        record;
+  n        int;
+begin
+  v_quota := public.admin_set_invite_quota(v_target, 2);
+  if v_quota <> 2 then raise exception 'TEST 8 FAIL: grant returned %', v_quota; end if;
+
+  v_quota := public.admin_set_invite_quota(v_target, 999);
+  if v_quota <> 20 then raise exception 'TEST 8 FAIL: quota was not clamped, got %', v_quota; end if;
+
+  select count(*) into n from public.admin_actions where action = 'set_invite_quota';
+  if n <> 2 then raise exception 'TEST 8 FAIL: audit log has % quota entries, expected 2', n; end if;
+
+  -- F was invited by E in 7d, so the roster must say so.
+  select * into r from public.admin_dancer_roster() where profile_id = v_target;
+  if not found then raise exception 'TEST 8 FAIL: the roster is missing F'; end if;
+  if r.invited_by_name is null then raise exception 'TEST 8 FAIL: the roster lost F''s inviter'; end if;
+  if r.signed_up_at is null then raise exception 'TEST 8 FAIL: the roster lost F''s signup date'; end if;
+  if r.invite_quota <> 20 then raise exception 'TEST 8 FAIL: the roster shows quota %', r.invite_quota; end if;
+end $$;
+reset role;
+
+-- 8d. Suspension records a reason, and the log cannot be doctored through
+--     the API — admin_actions has no insert/update/delete policy at all.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000a1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare r record;
+begin
+  perform public.admin_set_suspended(
+    (select id from public.profiles where user_id = '00000000-0000-4000-a000-0000000000f1'),
+    true,
+    'testing the audit trail'
+  );
+
+  select * into r from public.admin_actions where action = 'suspend' order by created_at desc limit 1;
+  if not found then raise exception 'TEST 8 FAIL: suspension was not logged'; end if;
+  if r.reason <> 'testing the audit trail' then
+    raise exception 'TEST 8 FAIL: the reason was not recorded (got %)', r.reason;
+  end if;
+  if r.actor <> '00000000-0000-4000-a000-0000000000a1' then
+    raise exception 'TEST 8 FAIL: the wrong admin was recorded';
+  end if;
+
+  -- Two layers have to hold here, and they fail differently, so assert both.
+  -- The GRANT is gone (20260729150000_revoke_default_grants.sql), so this
+  -- raises 42501 — but even if the grant came back, admin_actions has no
+  -- delete or update POLICY, so the statement would affect zero rows instead.
+  -- Accept either shape; reject a row actually disappearing.
+  declare
+    n_deleted int := 0;
+    n_left    int;
+  begin
+    begin
+      delete from public.admin_actions;
+      get diagnostics n_deleted = row_count;
+    exception when insufficient_privilege then
+      n_deleted := 0;
+    end;
+    if n_deleted <> 0 then raise exception 'TEST 8 FAIL: an admin deleted % audit rows', n_deleted; end if;
+
+    select count(*) into n_left from public.admin_actions;
+    if n_left = 0 then raise exception 'TEST 8 FAIL: the audit log was emptied'; end if;
+  end;
+end $$;
+reset role;
 
 rollback;
 

@@ -34,6 +34,42 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_actions: {
+        Row: {
+          action: string
+          actor: string | null
+          actor_email: string | null
+          created_at: string
+          detail: Json
+          id: string
+          reason: string | null
+          subject_label: string | null
+          subject_user: string | null
+        }
+        Insert: {
+          action: string
+          actor?: string | null
+          actor_email?: string | null
+          created_at?: string
+          detail?: Json
+          id?: string
+          reason?: string | null
+          subject_label?: string | null
+          subject_user?: string | null
+        }
+        Update: {
+          action?: string
+          actor?: string | null
+          actor_email?: string | null
+          created_at?: string
+          detail?: Json
+          id?: string
+          reason?: string | null
+          subject_label?: string | null
+          subject_user?: string | null
+        }
+        Relationships: []
+      }
       app_members: {
         Row: {
           invite_id: string | null
@@ -491,6 +527,33 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_dancer_roster: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          city: string | null
+          country: string | null
+          display_name: string
+          invite_quota: number
+          invited_by_name: string | null
+          invites_claimed: number
+          invites_created: number
+          joined_at: string | null
+          onboarded_at: string
+          photo_url: string | null
+          profile_id: string
+          signed_up_at: string
+          suspended_at: string | null
+          user_id: string
+        }[]
+      }
+      admin_overview: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      admin_set_invite_quota: {
+        Args: { p_profile_id: string; p_quota: number }
+        Returns: number
+      }
       create_invite: {
         Args: Record<PropertyKey, never>
         Returns: Database["public"]["Tables"]["invites"]["Row"]
@@ -521,7 +584,7 @@ export type Database = {
         Returns: string
       }
       admin_set_suspended: {
-        Args: { p_profile_id: string; p_suspended: boolean }
+        Args: { p_profile_id: string; p_suspended: boolean; p_reason?: string | null }
         Returns: string | null
       }
       get_passed: {

@@ -94,15 +94,96 @@ export async function fetchDancers(): Promise<DancerRow[]> {
   return data ?? [];
 }
 
+// The roster WITH the invite trail. Unlike fetchDancers() above this is not a
+// plain profiles read — who vouched for whom and when someone signed up are
+// things no client could see before, so they come through a SECURITY DEFINER
+// RPC that returns an explicit column list and raises for a non-admin caller.
+// See supabase/migrations/20260729140000_admin_panel.sql.
+export type RosterRow = {
+  profile_id: string;
+  user_id: string;
+  display_name: string;
+  photo_url: string | null;
+  city: string | null;
+  country: string | null;
+  suspended_at: string | null;
+  signed_up_at: string;
+  onboarded_at: string;
+  joined_at: string | null;
+  invited_by_name: string | null;
+  invite_quota: number;
+  invites_created: number;
+  invites_claimed: number;
+};
+
+export async function fetchDancerRoster(): Promise<RosterRow[]> {
+  const { data, error } = await supabase.rpc('admin_dancer_roster');
+  if (error) throw error;
+  return (data ?? []) as RosterRow[];
+}
+
+// Inviting is a granted privilege: a new member starts at 0 and an admin
+// raises it. Clamped to 0..20 in the function, logged to admin_actions.
+export async function setInviteQuota(profileId: string, quota: number): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_set_invite_quota', {
+    p_profile_id: profileId,
+    p_quota: quota,
+  });
+  if (error) throw error;
+  return data as number;
+}
+
+// --- overview + audit log --------------------------------------------------
+
+export type AdminOverview = {
+  members: number;
+  dancers: number;
+  suspended: number;
+  joined_last_7d: number;
+  pending_events: number;
+  invites_outstanding: number;
+  invites_claimed: number;
+  can_invite: number;
+};
+
+export async function fetchOverview(): Promise<AdminOverview> {
+  const { data, error } = await supabase.rpc('admin_overview');
+  if (error) throw error;
+  return data as unknown as AdminOverview;
+}
+
+export type AdminActionRow = Tables<'admin_actions'>;
+
+// The log is append-only by construction: every row is written by a SECURITY
+// DEFINER function, and admin_actions has no insert/update/delete policy, so
+// this read is the only thing the client can do with it.
+export async function fetchAdminActions(subjectUserId?: string): Promise<AdminActionRow[]> {
+  let query = supabase
+    .from('admin_actions')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (subjectUserId) query = query.eq('subject_user', subjectUserId);
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
+}
+
 // Suspend or reinstate. Goes through the RPC rather than an UPDATE because RLS
 // cannot limit a policy to one COLUMN — an admin update policy on profiles
 // would also let admins rewrite anyone's name, bio or photo. The function
 // touches suspended_at and nothing else, and raises if the caller isn't an
 // admin or is aiming at their own account.
-export async function setSuspended(profileId: string, suspended: boolean): Promise<string | null> {
+export async function setSuspended(
+  profileId: string,
+  suspended: boolean,
+  reason?: string | null
+): Promise<string | null> {
   const { data, error } = await supabase.rpc('admin_set_suspended', {
     p_profile_id: profileId,
     p_suspended: suspended,
+    p_reason: reason ?? null,
   });
   if (error) throw error;
   return data;

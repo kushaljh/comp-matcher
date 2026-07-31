@@ -5,11 +5,18 @@
 // Card, Your Card, Settings. Screens render inside <Tabs>, so a screen is free
 // to lay out its own wide-layout columns (e.g. The Floor's right rail) — the
 // shell only owns the header and the nav chrome.
+//
+// Admins get a sixth, Admin, which nobody else sees. It is REGISTERED for
+// everyone and merely hidden (href: null) rather than left out of the tree:
+// a route that only conditionally exists misbehaves when someone deep-links
+// to it or when useIsAdmin() resolves a beat after first render, whereas a
+// registered-but-hidden one just renders its own "Not authorized".
 
 import { Image } from 'expo-image';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { GestureResponderEvent, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useIsAdmin } from '../../features/admin/hooks';
 import { MatchLiveBanner } from '../../features/live/matchLive';
 import { useTheme } from '../../theme/ThemeProvider';
 
@@ -20,6 +27,17 @@ const NAV = [
   { name: 'profile', href: '/profile', label: 'Your Card' },
   { name: 'settings', href: '/settings', label: 'Settings' },
 ] as const;
+
+/** The admin-only sixth destination — 06 in the rail's numbering. */
+const ADMIN_NAV = { name: 'admin', href: '/admin', label: 'Admin' } as const;
+
+type NavItem = { name: string; href: string; label: string };
+
+/** The nav as this particular viewer sees it. */
+function useNav(): NavItem[] {
+  const { data: isAdmin } = useIsAdmin();
+  return isAdmin ? [...NAV, ADMIN_NAV] : [...NAV];
+}
 
 /** The design switches to the rail layout at 1080px. */
 const RAIL_BREAKPOINT = 1080;
@@ -99,10 +117,11 @@ function LeftRail() {
   const { colors, fonts, fs } = useTheme();
   const isActive = useActiveHref();
   const router = useRouter();
+  const nav = useNav();
 
   return (
     <View style={[styles.rail, { borderRightColor: colors.line }]}>
-      {NAV.map((item, i) => {
+      {nav.map((item, i) => {
         const active = isActive(item.href);
         return (
           <Pressable
@@ -186,6 +205,7 @@ export default function TabsLayout() {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const wide = width >= RAIL_BREAKPOINT;
+  const { data: isAdmin } = useIsAdmin();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -207,24 +227,30 @@ export default function TabsLayout() {
                   },
             }}
           >
-            {NAV.map((item) => (
-              <Tabs.Screen
-                key={item.name}
-                name={item.name}
-                options={{
-                  title: item.label,
-                  // The tab bar hands the button its focus state as
-                  // `aria-selected` (not accessibilityState), so read that.
-                  tabBarButton: (props) => (
-                    <TabBarButton
-                      label={item.label}
-                      focused={props['aria-selected'] === true}
-                      onPress={props.onPress}
-                    />
-                  ),
-                }}
-              />
-            ))}
+            {[...NAV, ADMIN_NAV].map((item) => {
+              // Admin is registered for everyone so the route always exists,
+              // but href: null keeps it out of a non-admin's tab bar.
+              const hidden = item.name === ADMIN_NAV.name && !isAdmin;
+              return (
+                <Tabs.Screen
+                  key={item.name}
+                  name={item.name}
+                  options={{
+                    title: item.label,
+                    href: hidden ? null : undefined,
+                    // The tab bar hands the button its focus state as
+                    // `aria-selected` (not accessibilityState), so read that.
+                    tabBarButton: (props) => (
+                      <TabBarButton
+                        label={item.label}
+                        focused={props['aria-selected'] === true}
+                        onPress={props.onPress}
+                      />
+                    ),
+                  }}
+                />
+              );
+            })}
           </Tabs>
         </View>
       </View>

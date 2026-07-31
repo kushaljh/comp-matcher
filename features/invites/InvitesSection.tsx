@@ -104,31 +104,37 @@ export function InvitesSection() {
 
   const unlimited = remaining === -1;
   const canCreate = unlimited || (remaining ?? 0) > 0;
+  // Inviting is granted, not given: a new member's quota starts at 0 until an
+  // admin raises it. "0 left" would read as "you spent them", which is the
+  // wrong story for someone who never had any — so distinguish the two.
+  const neverHadAny = !unlimited && (remaining ?? 0) === 0 && (invites?.length ?? 0) === 0;
 
   return (
     <View style={[styles.block, { backgroundColor: colors.fieldBg, borderRadius: radii.rSm }]}>
       <View style={styles.row}>
         <Text style={{ fontFamily: fonts.body, fontSize: fs(14.5), color: colors.ink }}>
-          {unlimited ? 'Invites' : `${remaining ?? 0} left`}
+          {unlimited ? 'Invites' : neverHadAny ? 'Not yet' : `${remaining ?? 0} left`}
         </Text>
-        <Pressable
-          onPress={() => createInvite.mutate()}
-          disabled={!canCreate || createInvite.isPending}
-          accessibilityRole="button"
-          hitSlop={8}
-        >
-          <Text
-            style={{
-              fontFamily: fonts.condensedSemi,
-              fontSize: fs(12),
-              letterSpacing: 1.8,
-              textTransform: 'uppercase',
-              color: canCreate ? colors.brass : colors.ink2,
-            }}
+        {neverHadAny ? null : (
+          <Pressable
+            onPress={() => createInvite.mutate()}
+            disabled={!canCreate || createInvite.isPending}
+            accessibilityRole="button"
+            hitSlop={8}
           >
-            {createInvite.isPending ? 'Creating…' : 'New code'}
-          </Text>
-        </Pressable>
+            <Text
+              style={{
+                fontFamily: fonts.condensedSemi,
+                fontSize: fs(12),
+                letterSpacing: 1.8,
+                textTransform: 'uppercase',
+                color: canCreate ? colors.brass : colors.ink2,
+              }}
+            >
+              {createInvite.isPending ? 'Creating…' : 'New code'}
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       {createInvite.isError ? (
@@ -143,7 +149,9 @@ export function InvitesSection() {
         invites.map((invite) => <InviteRowView key={invite.id} invite={invite} />)
       ) : (
         <Text style={[styles.message, { fontFamily: fonts.body, fontSize: fs(13), color: colors.ink2 }]}>
-          You haven&apos;t made any invites yet.
+          {neverHadAny
+            ? 'An organiser hasn’t given you invites yet. Ask one if there’s someone you’d vouch for.'
+            : 'You haven’t made any invites yet.'}
         </Text>
       )}
     </View>

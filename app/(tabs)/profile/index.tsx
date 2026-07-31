@@ -235,9 +235,11 @@ export default function ProfileScreen() {
           <HistorySection profileId={profileId} />
         </View>
 
+        {/* Admin has its own tab now (06 in the rail). This shortcut stays for
+            the habit, and because the tab bar is easy to miss on a phone. */}
         {isAdmin ? (
           <View style={[styles.section, styles.adminRow]}>
-            <Button title="Admin" variant="secondary" onPress={() => router.push('/profile/admin')} />
+            <Button title="Admin" variant="secondary" onPress={() => router.push('/admin')} />
           </View>
         ) : null}
       </ScrollView>

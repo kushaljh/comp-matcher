@@ -75,6 +75,8 @@ export type Database = {
           invite_id: string | null
           invite_quota: number
           invited_by: string | null
+          invited_by_email: string | null
+          invited_by_name: string | null
           joined_at: string
           origin: string
           user_id: string
@@ -83,6 +85,8 @@ export type Database = {
           invite_id?: string | null
           invite_quota?: number
           invited_by?: string | null
+          invited_by_email?: string | null
+          invited_by_name?: string | null
           joined_at?: string
           origin?: string
           user_id: string
@@ -91,6 +95,8 @@ export type Database = {
           invite_id?: string | null
           invite_quota?: number
           invited_by?: string | null
+          invited_by_email?: string | null
+          invited_by_name?: string | null
           joined_at?: string
           origin?: string
           user_id?: string
@@ -545,7 +551,9 @@ export type Database = {
           display_name: string
           email: string | null
           invite_quota: number
+          invited_by_email: string | null
           invited_by_name: string | null
+          inviter_still_here: boolean
           invites_claimed: number
           invites_created: number
           joined_at: string | null

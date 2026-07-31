@@ -55,10 +55,15 @@ function shortDate(value: string | null): string {
 // they asked for.
 function howTheyGotIn(dancer: RosterRow): string {
   switch (dancer.origin) {
-    case 'invited':
-      return dancer.invited_by_name
-        ? `Invite from ${dancer.invited_by_name}`
-        : 'Invite — from an account since deleted';
+    case 'invited': {
+      const who = [dancer.invited_by_name, dancer.invited_by_email]
+        .filter(Boolean)
+        .join(' · ');
+      if (!who) return 'Invite — inviter unknown';
+      // The name survives the inviter deleting their account, on purpose:
+      // otherwise vouching for someone and then leaving would erase the link.
+      return dancer.inviter_still_here ? `Invite from ${who}` : `Invite from ${who} (account deleted)`;
+    }
     case 'grandfathered':
       return 'Founding member — joined before invites';
     case 'seeded':

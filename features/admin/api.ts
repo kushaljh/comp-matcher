@@ -117,8 +117,15 @@ export type RosterRow = {
    * their inviter deleting their account.
    */
   origin: 'grandfathered' | 'invited' | 'seeded';
-  /** Null once the inviter deletes their account — see `origin`. */
+  /**
+   * The inviter, live if they're still here and snapshot-from-join-time if
+   * they've left. A vouching record any voucher could erase by deleting their
+   * account would be worthless, so this survives them.
+   */
   invited_by_name: string | null;
+  invited_by_email: string | null;
+  /** False when the inviter has deleted their account. */
+  inviter_still_here: boolean;
   invite_quota: number;
   invites_created: number;
   invites_claimed: number;

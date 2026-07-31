@@ -914,7 +914,34 @@ begin
   if r.origin <> 'invited' then
     raise exception 'TEST 10 FAIL: an invited member was relabelled % once their inviter left', r.origin;
   end if;
+
+  -- 10c. And WHO vouched survives. This is the abuse case the snapshot exists
+  --      for: vouch for a problem member, then delete your account to break
+  --      the link. See 20260729210000_preserve_inviter_identity.sql.
+  if r.invited_by_name is null then
+    raise exception 'TEST 10 FAIL: the inviter''s name was lost when they deleted their account';
+  end if;
+  if r.invited_by_email is null then
+    raise exception 'TEST 10 FAIL: the inviter''s email was lost when they deleted their account';
+  end if;
 end $$;
+
+-- The roster reports it too, and flags that the account is gone.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000a1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare r record;
+begin
+  select * into r from public.admin_dancer_roster()
+   where profile_id = '00000000-0000-4000-b000-00000000fa02';
+  if r.invited_by_name is null then
+    raise exception 'TEST 10 FAIL: the roster lost the departed inviter';
+  end if;
+  if r.inviter_still_here then
+    raise exception 'TEST 10 FAIL: the roster claims a deleted inviter is still here';
+  end if;
+end $$;
+reset role;
 
 rollback;
 

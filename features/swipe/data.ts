@@ -17,6 +17,7 @@ import type {
 // (one per role), and those are two independent decks with separate swipe
 // histories. Keying on contestId would collapse them into one cache slot.
 export const deckKey = (entryId: string) => ['swipe', 'deck', entryId];
+export const passedKey = (entryId: string) => ['swipe', 'passed', entryId];
 export const statsKey = (contestId: string, profileId: string, role: DanceRole) => [
   'swipe',
   'stats',
@@ -103,6 +104,26 @@ export function useDeck(entryId: string | null | undefined) {
     // Always fetch fresh candidates when we ask (entry change / screen focus).
     staleTime: 0,
     queryFn: () => fetchDeck(entryId!),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// The dancers this entry has PASSED on — get_deck's query with the swipe test
+// inverted, so the cards come back in the same shape. Only fetched when the
+// floor is cleared, which is the one place it's shown.
+// ---------------------------------------------------------------------------
+export function usePassed(entryId: string | null | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: passedKey(entryId ?? ''),
+    enabled: enabled && !!entryId,
+    // Same reasoning as the deck: taking someone back has to be reflected the
+    // next time this is asked for, not up to a minute later.
+    staleTime: 0,
+    queryFn: async (): Promise<DeckCard[]> => {
+      const { data, error } = await supabase.rpc('get_passed', { p_entry_id: entryId! });
+      if (error) throw error;
+      return data ?? [];
+    },
   });
 }
 

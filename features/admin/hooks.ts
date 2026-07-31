@@ -49,6 +49,31 @@ export function useRejectEvent() {
   });
 }
 
+export function useAdminDancers() {
+  return useQuery({
+    queryKey: ['admin', 'dancers'],
+    queryFn: api.fetchDancers,
+  });
+}
+
+// Suspending changes who the decks deal and what the Season counts, so this
+// invalidates those caches too — the same prefixes features/events and
+// features/swipe key on. Without it an admin would suspend someone and still
+// see them on their own floor until an unrelated refetch.
+export function useSetSuspended() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { profileId: string; suspended: boolean }) =>
+      api.setSuspended(vars.profileId, vars.suspended),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'dancers'] });
+      queryClient.invalidateQueries({ queryKey: ['swipe', 'deck'] });
+      queryClient.invalidateQueries({ queryKey: ['swipe', 'passed'] });
+      queryClient.invalidateQueries({ queryKey: ['entries', 'pool'] });
+    },
+  });
+}
+
 export function useAdminContestsForEvent(eventId: string | undefined) {
   return useQuery({
     queryKey: ['admin', 'contests', 'byEvent', eventId],

@@ -5,10 +5,11 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { useSignedPhotoUrls } from '../shared/photo';
 import { useClips, useGalleryPhotos } from '../shared/media';
 import { suppressMatchBanner } from '../live/matchLive';
-import { deckKey, deleteOwnPass, findMatch, insertSwipe, statsKey } from './data';
+import { deckKey, deleteOwnPass, findMatch, insertSwipe, passedKey, statsKey, usePassed } from './data';
 import { Bulbs } from './Decor';
 import { ExpandedCard } from './ExpandedCard';
 import { MatchOverlay } from './MatchOverlay';
+import { PassedList } from './PassedList';
 import { SwipeCard, type SwipeCardHandle } from './SwipeCard';
 import { withAlpha } from './tint';
 import type {
@@ -86,6 +87,11 @@ export function Deck({
   // changes, or the next dancer would open on photo 3.
   const [photoIndex, setPhotoIndex] = useState(0);
   const [matchedFace, setMatchedFace] = useState<MatchFace | null>(null);
+  // Profile ids mid-restore, so a double-tap can't fire two deletes.
+  const [restoring, setRestoring] = useState<string[]>([]);
+  // Holds the cleared-floor panel open once someone has been taken back, until
+  // the dancer says they're done picking.
+  const [reviewing, setReviewing] = useState(false);
   const topCardRef = useRef<SwipeCardHandle>(null);
 
   // Guards against button double-fire on a card that is still mid-fly-off.
@@ -181,7 +187,9 @@ export function Deck({
   }
 
   const commit = useCallback((direction: SwipeDirection) => {
-    if (busyRef.current || stack.length === 0) return;
+    // `reviewing` can be true with cards in the stack — the panel is covering
+    // them, so a button or key press must not swipe one sight-unseen.
+    if (busyRef.current || stack.length === 0 || reviewing) return;
     busyRef.current = true;
     // Arm the failsafe: the normal path clears this in handleSwipe's finally.
     clearWatchdog();
@@ -191,7 +199,7 @@ export function Deck({
     }, 2000);
     setExpanded(false);
     topCardRef.current?.swipe(direction);
-  }, [stack.length]);
+  }, [stack.length, reviewing]);
 
   // Take back a pass. The DB lets us delete our own pass rows and nothing else,
   // so a like gets the design's notice instead of a delete.
@@ -229,6 +237,50 @@ export function Deck({
   }, [undoStack, entryId, contestId, myProfileId, myRole, queryClient, showNotice]);
 
   const top = stack[0];
+  // The cleared-floor panel. It stays up after a restore (`reviewing`) so a
+  // dancer can take back several people in one go instead of being dropped onto
+  // the first one they recovered and losing the list.
+  const showPanel = !top || reviewing;
+  const passedQuery = usePassed(entryId, showPanel);
+  const passed = passedQuery.data ?? [];
+
+  // Put someone back on the floor. Deleting the pass row is what un-hides them
+  // from get_deck; adding them to `stack` here is just so they appear without
+  // waiting for a refetch.
+  const restore = useCallback(
+    async (card: DeckCard) => {
+      if (restoring.includes(card.profile_id)) return;
+      setRestoring((prev) => [...prev, card.profile_id]);
+      setError(null);
+      try {
+        await deleteOwnPass({
+          contestId,
+          swiperProfileId: myProfileId,
+          swiperRole: myRole,
+          targetProfileId: card.profile_id,
+        });
+        setReviewing(true);
+        setStack((prev) =>
+          prev.some((c) => c.profile_id === card.profile_id) ? prev : [...prev, card]
+        );
+        // Drop the row locally rather than refetching the list underneath the
+        // dancer's finger.
+        queryClient.setQueryData<DeckCard[]>(passedKey(entryId), (prev) =>
+          (prev ?? []).filter((c) => c.profile_id !== card.profile_id)
+        );
+        // Same reasoning as undo(): mark the deck stale but don't pull now, or
+        // get_deck's unordered result could bury the recovered card mid-pile.
+        queryClient.invalidateQueries({ queryKey: deckKey(entryId), refetchType: 'none' });
+        // The Season counts this same pool, and it just grew by one.
+        queryClient.invalidateQueries({ queryKey: ['entries', 'pool'] });
+      } catch {
+        setError('Could not put them back. Check your connection and try again.');
+      } finally {
+        setRestoring((prev) => prev.filter((id) => id !== card.profile_id));
+      }
+    },
+    [restoring, entryId, contestId, myProfileId, myRole, queryClient]
+  );
 
   // Primary photo first, then the extras — the order the segments count in.
   const topPhotoPaths = top
@@ -286,7 +338,8 @@ export function Deck({
         commit('like');
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        if (stack.length > 0) setExpanded(true);
+        // Nothing to expand while the panel is covering the stack.
+        if (stack.length > 0 && !showPanel) setExpanded(true);
       } else if (e.key === 'z' || e.key === 'Z') {
         e.preventDefault();
         undo();
@@ -294,16 +347,18 @@ export function Deck({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [commit, undo, expanded, matchedFace, stack.length]);
+  }, [commit, undo, expanded, matchedFace, stack.length, showPanel]);
 
-  const statusLine = top
-    ? `${stack.length} of ${Math.max(cards.length, stack.length)} still on the floor · drag or use the buttons`
-    : 'Floor cleared';
+  const statusLine = showPanel
+    ? stack.length
+      ? `${stack.length} back on the floor · deal them in when you're ready`
+      : 'Floor cleared'
+    : `${stack.length} of ${Math.max(cards.length, stack.length)} still on the floor · drag or use the buttons`;
 
   return (
     <View style={styles.column}>
       <View style={[styles.deckArea, { width: cardWidth }]}>
-        {stack.length > 2 ? (
+        {!showPanel && stack.length > 2 ? (
           <View
             style={[
               styles.peek,
@@ -312,7 +367,7 @@ export function Deck({
             ]}
           />
         ) : null}
-        {stack.length > 1 ? (
+        {!showPanel && stack.length > 1 ? (
           <View
             style={[
               styles.peek,
@@ -322,7 +377,7 @@ export function Deck({
           />
         ) : null}
 
-        {top ? (
+        {top && !showPanel ? (
           <SwipeCard
             key={top.profile_id}
             ref={topCardRef}
@@ -340,6 +395,9 @@ export function Deck({
           <View
             style={[
               styles.empty,
+              // The list needs the height the centred copy would otherwise
+              // spread into, so it packs to the top and loses some padding.
+              passed.length ? styles.emptyWithList : null,
               { borderRadius: radii.r, borderColor: colors.line, backgroundColor: colors.likeBg },
             ]}
           >
@@ -366,35 +424,35 @@ export function Deck({
                 maxWidth: 310,
               }}
             >
-              Everyone entered in {contestName} has had their turn. New entries land here
-              as they register.
+              {passed.length
+                ? `Everyone entered in ${contestName} has had their turn — but a pass isn't final. Second thoughts?`
+                : `Everyone entered in ${contestName} has had their turn. New entries land here as they register.`}
             </Text>
+
+            {passed.length ? (
+              <PassedList cards={passed} restoring={restoring} onRestore={restore} />
+            ) : null}
+
             <View style={styles.emptyActions}>
-              <Pressable
-                onPress={undo}
-                disabled={!canUndo}
-                accessibilityRole="button"
-                style={[
-                  styles.emptyButton,
-                  {
-                    borderRadius: radii.rSm,
-                    borderColor: canUndo ? colors.brass : colors.line,
-                  },
-                ]}
-              >
-                <Text
+              {stack.length ? (
+                <Pressable
+                  onPress={() => setReviewing(false)}
+                  accessibilityRole="button"
                   style={[
-                    styles.emptyButtonText,
-                    {
-                      fontFamily: fonts.condensedSemi,
-                      fontSize: fs(13),
-                      color: canUndo ? colors.brass : colors.ink2,
-                    },
+                    styles.emptyButton,
+                    { borderRadius: radii.rSm, borderColor: colors.brass, backgroundColor: colors.brass },
                   ]}
                 >
-                  Take back a pass
-                </Text>
-              </Pressable>
+                  <Text
+                    style={[
+                      styles.emptyButtonText,
+                      { fontFamily: fonts.condensedSemi, fontSize: fs(13), color: colors.bg },
+                    ]}
+                  >
+                    Deal them in · {stack.length}
+                  </Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 onPress={onGoToEvents}
                 accessibilityRole="button"
@@ -413,7 +471,7 @@ export function Deck({
           </View>
         )}
 
-        {top && expanded ? (
+        {top && expanded && !showPanel ? (
           <ExpandedCard
             card={top}
             history={historyByProfile[top.profile_id] ?? []}
@@ -575,6 +633,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 34,
     gap: 16,
+  },
+  emptyWithList: {
+    justifyContent: 'flex-start',
+    paddingTop: 22,
+    paddingBottom: 18,
+    paddingHorizontal: 18,
+    gap: 12,
   },
   emptyActions: {
     flexDirection: 'row',

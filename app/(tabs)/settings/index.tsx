@@ -6,6 +6,7 @@
 // purpose: this is where people look for them. The design's email-OTP delete
 // flow is deferred — this keeps the existing confirm + delete_my_account RPC.
 
+import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../../theme/components';
 import { TEXT_SCALES, useTheme, type ThemeMode } from '../../../theme/ThemeProvider';
@@ -81,6 +82,7 @@ export default function SettingsScreen() {
     reduceMotion,
     setReduceMotion,
   } = useTheme();
+  const router = useRouter();
   const { session } = useSession();
   const signOut = useSignOut();
   const deleteAccount = useDeleteAccount();
@@ -182,6 +184,26 @@ export default function SettingsScreen() {
           <Hint>
             Comp Matcher is invite only. Share a code with a dancer you&apos;d vouch for — each one
             works once.
+          </Hint>
+        </View>
+
+        <View style={styles.section}>
+          <SectionLabel>Feedback</SectionLabel>
+          <View style={[styles.block, { backgroundColor: colors.fieldBg, borderRadius: radii.rSm }]}>
+            <Pressable
+              onPress={() => router.navigate('/feedback')}
+              accessibilityRole="link"
+              style={styles.row}
+            >
+              <Text style={{ fontFamily: fonts.body, fontSize: fs(14.5), color: colors.ink }}>
+                Send feedback
+              </Text>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fs(12), color: colors.brass }}>→</Text>
+            </Pressable>
+          </View>
+          <Hint>
+            Found a bug, or thought of something the app should do? The Feedback tab goes straight to
+            the admins.
           </Hint>
         </View>
 

@@ -128,6 +128,29 @@ export function useAdminActions(subjectUserId?: string) {
   });
 }
 
+export function useAdminFeedback() {
+  return useQuery({
+    queryKey: ['admin', 'feedback'],
+    queryFn: api.fetchFeedback,
+  });
+}
+
+// Resolving moves two other numbers: the landing page's feedback_new count and
+// the admin log, which the RPC writes to. Both are invalidated here so the
+// panel doesn't leave a stale "3 new" behind it.
+export function useSetFeedbackStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; status: Enums<'feedback_status'> }) =>
+      api.setFeedbackStatus(vars.id, vars.status),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'feedback'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'actions'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'overview'] });
+    },
+  });
+}
+
 export function useAdminContestsForEvent(eventId: string | undefined) {
   return useQuery({
     queryKey: ['admin', 'contests', 'byEvent', eventId],

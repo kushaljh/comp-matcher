@@ -176,6 +176,7 @@ export type AdminOverview = {
   invites_outstanding: number;
   invites_claimed: number;
   can_invite: number;
+  feedback_new: number;
 };
 
 export async function fetchOverview(): Promise<AdminOverview> {
@@ -219,6 +220,38 @@ export async function setSuspended(
   });
   if (error) throw error;
   return data;
+}
+
+// --- feedback (admin) -----------------------------------------------------
+
+export type FeedbackRow = Tables<'feedback'>;
+
+// Every note, newest first. Relies entirely on the feedback_admin_select
+// policy — and feedback has no other select policy at all, so this same call
+// returns an empty list for a non-admin, including for notes they wrote.
+export async function fetchFeedback(): Promise<FeedbackRow[]> {
+  const { data, error } = await supabase
+    .from('feedback')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  return data ?? [];
+}
+
+// Marking read/unread goes through the RPC rather than an UPDATE because RLS
+// cannot limit a policy to one COLUMN — an admin update policy on feedback
+// would also let admins rewrite the message they were sent. The function
+// touches status, resolved_at and resolved_by, and logs to admin_actions.
+export async function setFeedbackStatus(
+  id: string,
+  status: Enums<'feedback_status'>
+): Promise<void> {
+  const { error } = await supabase.rpc('admin_set_feedback_status', {
+    p_id: id,
+    p_status: status,
+  });
+  if (error) throw error;
 }
 
 // --- contests (admin) -----------------------------------------------------

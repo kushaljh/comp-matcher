@@ -1,12 +1,14 @@
 // The app shell: marquee header on every size, a numbered left rail at
 // >= 1080px, and a label-only bottom tab bar below that.
 //
-// The five destinations are the design's nav: The Floor, The Season, Dance
-// Card, Your Card, Settings. Screens render inside <Tabs>, so a screen is free
-// to lay out its own wide-layout columns (e.g. The Floor's right rail) — the
-// shell only owns the header and the nav chrome.
+// The destinations are the design's nav — The Floor, The Season, Dance Card,
+// Your Card, Settings — plus Feedback, promoted to a tab of its own while the
+// floor is mostly test users and hearing about breakage matters more than a
+// tidy tab bar. Screens render inside <Tabs>, so a screen is free to lay out
+// its own wide-layout columns (e.g. The Floor's right rail) — the shell only
+// owns the header and the nav chrome.
 //
-// Admins get a sixth, Admin, which nobody else sees. It is REGISTERED for
+// Admins get one more, Admin, which nobody else sees. It is REGISTERED for
 // everyone and merely hidden (href: null) rather than left out of the tree:
 // a route that only conditionally exists misbehaves when someone deep-links
 // to it or when useIsAdmin() resolves a beat after first render, whereas a
@@ -26,9 +28,10 @@ const NAV = [
   { name: 'matches', href: '/matches', label: 'Dance Card' },
   { name: 'profile', href: '/profile', label: 'Your Card' },
   { name: 'settings', href: '/settings', label: 'Settings' },
+  { name: 'feedback', href: '/feedback', label: 'Feedback' },
 ] as const;
 
-/** The admin-only sixth destination — 06 in the rail's numbering. */
+/** The admin-only last destination — 07 in the rail's numbering. */
 const ADMIN_NAV = { name: 'admin', href: '/admin', label: 'Admin' } as const;
 
 type NavItem = { name: string; href: string; label: string };

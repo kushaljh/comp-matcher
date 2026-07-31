@@ -1,5 +1,5 @@
-// The admin log: every suspension, reinstatement, invite grant and admin
-// invite deletion, newest first.
+// The admin log: every suspension, reinstatement, invite grant, admin invite
+// deletion and feedback resolution, newest first.
 //
 // Append-only by construction — admin_actions has no insert/update/delete
 // policy, so every row here was written by a SECURITY DEFINER function and
@@ -17,6 +17,8 @@ const ACTION_LABELS: Record<string, string> = {
   reinstate: 'Reinstated',
   set_invite_quota: 'Set invites for',
   delete_invite: 'Deleted invite',
+  resolve_feedback: 'Resolved feedback from',
+  reopen_feedback: 'Reopened feedback from',
 };
 
 export default function AdminLogScreen() {

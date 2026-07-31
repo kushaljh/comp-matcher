@@ -10,6 +10,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '../../../theme/components';
 import { TEXT_SCALES, useTheme, type ThemeMode } from '../../../theme/ThemeProvider';
 import { useSession } from '../../../features/auth/SessionProvider';
+import { InvitesSection } from '../../../features/invites/InvitesSection';
 import { confirmAsync } from '../../../features/profile/confirm';
 import { useDeleteAccount, useSignOut } from '../../../features/profile/hooks';
 
@@ -173,6 +174,15 @@ export default function SettingsScreen() {
             <Pill label="Reduce motion" active={reduceMotion} onPress={() => setReduceMotion(true)} />
           </View>
           <Hint>Reduce motion stills card animations and celebration effects. Swiping still works.</Hint>
+        </View>
+
+        <View style={styles.section}>
+          <SectionLabel>Invites</SectionLabel>
+          <InvitesSection />
+          <Hint>
+            Comp Matcher is invite only. Share a code with a dancer you&apos;d vouch for — each one
+            works once.
+          </Hint>
         </View>
 
         <View style={styles.section}>

@@ -5,6 +5,7 @@ import { colors, fontSizes, fontWeights, spacing } from '../../../theme/tokens';
 import { useAdminApprovedEvents, useAdminPendingEvents, useIsAdmin } from '../../../features/admin/hooks';
 import { PendingEventCard } from '../../../features/admin/PendingEventCard';
 import { ApprovedEventCard } from '../../../features/admin/ApprovedEventCard';
+import { InvitesPanel } from '../../../features/admin/InvitesPanel';
 
 // Guard: RLS is the REAL gate (a non-admin's queries below would just come
 // back empty/rejected regardless of this screen), this is purely UX so a
@@ -39,6 +40,9 @@ function AdminPanel() {
   return (
     <>
       <Text style={styles.title}>Admin</Text>
+
+      <Text style={styles.sectionTitle}>Invites</Text>
+      <InvitesPanel />
 
       <Text style={styles.sectionTitle}>Pending events</Text>
       {pendingLoading ? (

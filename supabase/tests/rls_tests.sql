@@ -263,6 +263,186 @@ begin
 end $$;
 reset role;
 
+-- ===========================================================================
+-- TEST 7 — invite-only access
+--   uE is a brand-new auth user created WITHOUT an invite_code, so the
+--   on_auth_user_created_claim_invite trigger grants membership (the
+--   service-role seeding path). uF is created and then has its membership
+--   removed, standing in for an uninvited session.
+-- ===========================================================================
+insert into auth.users (id, aud, role, email, created_at, updated_at) values
+  ('00000000-0000-4000-a000-0000000000e1', 'authenticated', 'authenticated', 'rls_e@test.local', now(), now()),
+  ('00000000-0000-4000-a000-0000000000f1', 'authenticated', 'authenticated', 'rls_f@test.local', now(), now());
+
+do $$
+declare n int;
+begin
+  select count(*) into n from public.app_members
+   where user_id in ('00000000-0000-4000-a000-0000000000e1',
+                     '00000000-0000-4000-a000-0000000000f1');
+  if n <> 2 then raise exception 'TEST 7 FAIL: trigger did not grant membership on codeless insert (got %)', n; end if;
+end $$;
+
+-- F is the uninvited one from here on.
+delete from public.app_members where user_id = '00000000-0000-4000-a000-0000000000f1';
+
+-- 7a. A member CAN create their profile; a non-member cannot.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000e1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  insert into public.profiles (user_id, display_name)
+  values ('00000000-0000-4000-a000-0000000000e1', 'Test E (member)');
+exception when others then
+  raise exception 'TEST 7 FAIL: member E could not create a profile (%)', sqlerrm;
+end $$;
+reset role;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000f1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  begin
+    insert into public.profiles (user_id, display_name)
+    values ('00000000-0000-4000-a000-0000000000f1', 'Test F (uninvited)');
+    raise exception 'TEST 7 FAIL: uninvited F created a profile';
+  exception when insufficient_privilege then
+    null;  -- expected: profiles_insert requires an app_members row
+  end;
+end $$;
+reset role;
+
+-- 7b. app_members is own-row only.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000e1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare n int;
+begin
+  select count(*) into n from public.app_members;
+  if n <> 1 then raise exception 'TEST 7 FAIL: E can see % app_members rows, expected only their own', n; end if;
+end $$;
+reset role;
+
+-- 7c. create_invite() respects the quota, and the codes belong to the caller.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000e1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare
+  v_code text;
+  n int;
+begin
+  if public.my_invites_remaining() <> 3 then
+    raise exception 'TEST 7 FAIL: fresh member should have 3 invites, got %', public.my_invites_remaining();
+  end if;
+
+  for i in 1..3 loop
+    v_code := (public.create_invite()).code;
+  end loop;
+
+  if public.my_invites_remaining() <> 0 then
+    raise exception 'TEST 7 FAIL: quota not exhausted after 3 invites (got %)', public.my_invites_remaining();
+  end if;
+
+  begin
+    perform public.create_invite();
+    raise exception 'TEST 7 FAIL: create_invite() succeeded past the quota';
+  exception when check_violation then
+    null;  -- expected
+  end;
+
+  select count(*) into n from public.invites;
+  if n <> 3 then raise exception 'TEST 7 FAIL: E should see their 3 invites, got %', n; end if;
+end $$;
+reset role;
+
+-- 7d. F redeems one of E's codes: membership appears, the code is consumed,
+--     and a second redemption of the same code fails.
+--
+-- F genuinely cannot SELECT E's invites (that is the point of invites_select),
+-- so the code has to reach them out of band — someone texts it to them. This
+-- temp table is that text message: it is stocked as postgres and readable by
+-- the authenticated role, unlike public.invites.
+create temp table shared_codes as
+  select code, row_number() over (order by created_at) as n from public.invites;
+grant select on shared_codes to authenticated;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000f1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_code text;
+begin
+  -- F cannot read public.invites at all — prove it, then redeem anyway.
+  if (select count(*) from public.invites) <> 0 then
+    raise exception 'TEST 7 FAIL: non-owner F can read invites they did not create';
+  end if;
+
+  select code into v_code from shared_codes where n = 1;
+
+  perform public.redeem_invite(v_code);
+
+  if not exists (select 1 from public.app_members where user_id = '00000000-0000-4000-a000-0000000000f1') then
+    raise exception 'TEST 7 FAIL: redeem_invite did not grant F membership';
+  end if;
+end $$;
+reset role;
+
+-- The redeeming user's own row is now visible to them; the invite is consumed.
+do $$
+declare n int;
+begin
+  select count(*) into n from public.invites
+   where redeemed_by = '00000000-0000-4000-a000-0000000000f1';
+  if n <> 1 then raise exception 'TEST 7 FAIL: expected exactly 1 invite consumed by F, got %', n; end if;
+end $$;
+
+-- 7e. A consumed code cannot be redeemed again (uG tries F's code).
+insert into auth.users (id, aud, role, email, created_at, updated_at) values
+  ('00000000-0000-4000-a000-0000000000a2', 'authenticated', 'authenticated', 'rls_g@test.local', now(), now());
+delete from public.app_members where user_id = '00000000-0000-4000-a000-0000000000a2';
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000a2","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_code text;
+begin
+  select code into v_code from shared_codes where n = 1;   -- the one F just used
+
+  begin
+    perform public.redeem_invite(v_code);
+    raise exception 'TEST 7 FAIL: a consumed invite code was redeemed twice';
+  exception when check_violation then
+    null;  -- expected
+  end;
+end $$;
+reset role;
+
+-- 7f. The before_user_created hook: no code key allows (service-role path),
+--     an unknown or empty code rejects, a live code allows.
+do $$
+declare
+  v_code text;
+  v_live jsonb;
+begin
+  if public.hook_require_invite('{"user":{"email":"x@test.local"}}'::jsonb) <> '{}'::jsonb then
+    raise exception 'TEST 7 FAIL: hook rejected a codeless (service-role) signup';
+  end if;
+
+  if public.hook_require_invite('{"user":{"user_metadata":{"invite_code":"NOTACODE"}}}'::jsonb) -> 'error' is null then
+    raise exception 'TEST 7 FAIL: hook allowed an unknown invite code';
+  end if;
+
+  if public.hook_require_invite('{"user":{"user_metadata":{"invite_code":""}}}'::jsonb) -> 'error' is null then
+    raise exception 'TEST 7 FAIL: hook allowed an empty invite code';
+  end if;
+
+  select code into v_code from public.invites where redeemed_by is null limit 1;
+  v_live := jsonb_build_object('user', jsonb_build_object('user_metadata',
+              jsonb_build_object('invite_code', lower(v_code))));
+  if public.hook_require_invite(v_live) <> '{}'::jsonb then
+    raise exception 'TEST 7 FAIL: hook rejected a live invite code (case-insensitive match)';
+  end if;
+end $$;
+
 rollback;
 
 \echo 'ALL RLS TESTS PASSED'

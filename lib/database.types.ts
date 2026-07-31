@@ -34,6 +34,38 @@ export type Database = {
         }
         Relationships: []
       }
+      app_members: {
+        Row: {
+          invite_id: string | null
+          invite_quota: number
+          invited_by: string | null
+          joined_at: string
+          user_id: string
+        }
+        Insert: {
+          invite_id?: string | null
+          invite_quota?: number
+          invited_by?: string | null
+          joined_at?: string
+          user_id: string
+        }
+        Update: {
+          invite_id?: string | null
+          invite_quota?: number
+          invited_by?: string | null
+          joined_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_members_invite_id_fkey"
+            columns: ["invite_id"]
+            isOneToOne: false
+            referencedRelation: "invites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       competition_history: {
         Row: {
           contest_name: string
@@ -179,6 +211,36 @@ export type Database = {
           status?: Database["public"]["Enums"]["event_status"]
           suggested_by?: string | null
           website_url?: string | null
+        }
+        Relationships: []
+      }
+      invites: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string
+          expires_at: string | null
+          id: string
+          redeemed_at: string | null
+          redeemed_by: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by: string
+          expires_at?: string | null
+          id?: string
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string
+          expires_at?: string | null
+          id?: string
+          redeemed_at?: string | null
+          redeemed_by?: string | null
         }
         Relationships: []
       }
@@ -426,6 +488,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_invite: {
+        Args: Record<PropertyKey, never>
+        Returns: Database["public"]["Tables"]["invites"]["Row"]
+      }
       delete_my_account: {
         Args: Record<PropertyKey, never>
         Returns: undefined
@@ -461,9 +527,17 @@ export type Database = {
           division: Database["public"]["Enums"]["division"]
         }[]
       }
+      my_invites_remaining: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       other_role: {
         Args: { r: Database["public"]["Enums"]["dance_role"] }
         Returns: Database["public"]["Enums"]["dance_role"]
+      }
+      redeem_invite: {
+        Args: { p_code: string }
+        Returns: undefined
       }
     }
     Enums: {

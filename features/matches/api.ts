@@ -20,6 +20,7 @@ export type MatchListItem = {
     id: string;
     displayName: string;
     photoUrl: string | null;
+    isTest: boolean;
   };
 };
 
@@ -34,6 +35,7 @@ export type MatchDetail = {
     id: string;
     displayName: string;
     photoUrl: string | null;
+    isTest: boolean;
     /** Role in THIS pairing — a dancer has no single role any more. */
     role: Enums<'dance_role'>;
     bio: string | null;
@@ -70,6 +72,7 @@ type RawProfileLite = {
   id: string;
   display_name: string;
   photo_url: string | null;
+  is_test: boolean;
 };
 
 type RawMatchListRow = {
@@ -125,8 +128,8 @@ export async function fetchMatches(myProfileId: string): Promise<MatchListItem[]
       profile_b,
       created_at,
       contest:contests(id, name, event:events(id, name)),
-      profile_a_data:profiles!matches_profile_a_fkey(id, display_name, photo_url),
-      profile_b_data:profiles!matches_profile_b_fkey(id, display_name, photo_url)
+      profile_a_data:profiles!matches_profile_a_fkey(id, display_name, photo_url, is_test),
+      profile_b_data:profiles!matches_profile_b_fkey(id, display_name, photo_url, is_test)
     `
     )
     .or(`profile_a.eq.${myProfileId},profile_b.eq.${myProfileId}`)
@@ -197,6 +200,7 @@ export async function fetchMatches(myProfileId: string): Promise<MatchListItem[]
         id: otherId,
         displayName: other?.display_name ?? 'Dancer',
         photoUrl: other?.photo_url ?? null,
+        isTest: other?.is_test ?? false,
       },
     };
   });
@@ -217,8 +221,8 @@ export async function fetchMatchDetail(
       profile_b,
       created_at,
       contest:contests(name, event:events(name)),
-      profile_a_data:profiles!matches_profile_a_fkey(id, display_name, photo_url, bio, values, city, state, country),
-      profile_b_data:profiles!matches_profile_b_fkey(id, display_name, photo_url, bio, values, city, state, country)
+      profile_a_data:profiles!matches_profile_a_fkey(id, display_name, photo_url, is_test, bio, values, city, state, country),
+      profile_b_data:profiles!matches_profile_b_fkey(id, display_name, photo_url, is_test, bio, values, city, state, country)
     `
     )
     .eq('id', matchId)
@@ -245,6 +249,7 @@ export async function fetchMatchDetail(
       id: other.id,
       displayName: other.display_name,
       photoUrl: other.photo_url,
+      isTest: other.is_test,
       role: otherRole(myRole),
       bio: other.bio,
       values: other.values ?? [],

@@ -5,6 +5,7 @@ import { Image } from 'expo-image';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useSignedPhotoUrls } from '../shared/photo';
+import { TestPill } from '../shared/TestPill';
 import { Bulbs, Confetti } from './Decor';
 import type { MatchFace } from './types';
 
@@ -31,12 +32,18 @@ function Roundel({ face, label, uri }: { face: MatchFace; label: string; uri: st
           </Text>
         )}
       </View>
-      <Text
-        numberOfLines={1}
-        style={[styles.roundelLabel, { fontFamily: fonts.condensed, fontSize: fs(12), color: colors.ink }]}
-      >
-        {label}
-      </Text>
+      <View style={styles.roundelLabelRow}>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.roundelLabel,
+            { flexShrink: 1, fontFamily: fonts.condensed, fontSize: fs(12), color: colors.ink },
+          ]}
+        >
+          {label}
+        </Text>
+        {face.isTest ? <TestPill /> : null}
+      </View>
     </View>
   );
 }
@@ -191,6 +198,11 @@ const styles = StyleSheet.create({
   roundelLabel: {
     letterSpacing: 1.2,
     textTransform: 'uppercase',
+  },
+  roundelLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
   },
   actions: {
     width: '100%',

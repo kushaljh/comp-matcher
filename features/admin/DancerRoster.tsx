@@ -185,6 +185,10 @@ function DancerCard({ dancer }: { dancer: RosterRow }) {
     <Card style={styles.card}>
       <View style={styles.headerRow}>
         <Text style={styles.name}>{dancer.display_name}</Text>
+        {/* Same rule the profiles.is_test trigger uses: seeded accounts live on
+            the reserved .test TLD. The roster already shows the email, so the
+            badge is derived here rather than plumbed through the RPC. */}
+        {(dancer.email ?? '').endsWith('.test') ? <Text style={styles.testBadge}>Test</Text> : null}
         {suspended ? <Text style={styles.badge}>Suspended</Text> : null}
         {dancer.invite_quota === 0 ? <Text style={styles.mutedBadge}>No invites</Text> : null}
       </View>
@@ -323,6 +327,12 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xs,
     fontWeight: fontWeights.semibold,
     color: colors.textSecondary,
+    textTransform: 'uppercase',
+  },
+  testBadge: {
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.semibold,
+    color: colors.brassDark,
     textTransform: 'uppercase',
   },
   meta: {

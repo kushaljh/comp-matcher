@@ -24,10 +24,12 @@ export type MyEntry = {
   role: DanceRole;
 };
 
-// Minimal shape needed to render a face in the match celebration.
+// Minimal shape needed to render a face in the match celebration. isTest is
+// optional because the caller's own face never carries the badge.
 export type MatchFace = {
   displayName: string;
   photoUrl: string | null;
+  isTest?: boolean;
 };
 
 // The caller's own profile, as the floor needs it. Role is NOT part of this any

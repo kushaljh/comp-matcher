@@ -172,7 +172,11 @@ export function Deck({
           // the same two dancers can pair twice in one contest, once per role,
           // and suppressing one must not swallow the other's banner.
           suppressMatchBanner(`${contestId}:${card.profile_id}:${myRole}`);
-          setMatchedFace({ displayName: card.display_name, photoUrl: card.photo_url });
+          setMatchedFace({
+            displayName: card.display_name,
+            photoUrl: card.photo_url,
+            isTest: card.is_test,
+          });
         }
       }
     } catch {

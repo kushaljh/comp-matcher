@@ -4,6 +4,7 @@ import { Screen } from '../../../theme/components';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { Avatar } from '../../../features/matches/components';
 import { useSignedPhotoUrls } from '../../../features/shared/photo';
+import { TestPill } from '../../../features/shared/TestPill';
 import { formatRelativeTime } from '../../../features/matches/format';
 import { useMatches } from '../../../features/matches/hooks';
 import type { MatchListItem } from '../../../features/matches/api';
@@ -140,9 +141,15 @@ export default function MatchesScreen() {
                   name={match.otherProfile.displayName}
                 />
                 <View style={styles.rowText}>
-                  <Text style={{ fontFamily: fonts.serif, fontSize: fs(19), color: colors.ink, lineHeight: fs(23) }}>
-                    {match.otherProfile.displayName}
-                  </Text>
+                  <View style={styles.nameRow}>
+                    <Text
+                      numberOfLines={1}
+                      style={{ flexShrink: 1, fontFamily: fonts.serif, fontSize: fs(19), color: colors.ink, lineHeight: fs(23) }}
+                    >
+                      {match.otherProfile.displayName}
+                    </Text>
+                    {match.otherProfile.isTest ? <TestPill /> : null}
+                  </View>
                   <Text
                     style={{
                       fontFamily: fonts.condensed,
@@ -236,6 +243,11 @@ const styles = StyleSheet.create({
   rowText: {
     flex: 1,
     minWidth: 0,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   rowRight: {
     alignItems: 'flex-end',

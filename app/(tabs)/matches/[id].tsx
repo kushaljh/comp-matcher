@@ -6,6 +6,7 @@ import { Image } from 'expo-image';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PhotoLightbox } from '../../../features/shared/PhotoLightbox';
+import { TestPill } from '../../../features/shared/TestPill';
 import { useSignedPhotoUrl } from '../../../features/shared/photo';
 import { formatLocalScene } from '../../../features/shared/location';
 import { useClips, useGalleryPhotos } from '../../../features/shared/media';
@@ -126,9 +127,15 @@ export default function MatchDetailScreen() {
                 Paired · {formatRelativeTime(match.createdAt)}
               </Text>
             </View>
-            <Text style={{ fontFamily: fonts.serif, fontSize: fs(32), lineHeight: fs(34), color: colors.ink }}>
-              {otherProfile.displayName}
-            </Text>
+            <View style={styles.nameRow}>
+              <Text
+                numberOfLines={2}
+                style={{ flexShrink: 1, fontFamily: fonts.serif, fontSize: fs(32), lineHeight: fs(34), color: colors.ink }}
+              >
+                {otherProfile.displayName}
+              </Text>
+              {otherProfile.isTest ? <TestPill /> : null}
+            </View>
             {roleLine ? (
               <Text
                 style={{
@@ -315,6 +322,11 @@ export default function MatchDetailScreen() {
 const styles = StyleSheet.create({
   screen: {
     padding: 0,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
   },
   centered: {
     alignItems: 'center',

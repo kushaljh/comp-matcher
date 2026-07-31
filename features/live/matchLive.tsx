@@ -12,6 +12,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
+import { TestPill } from '../shared/TestPill';
 import { useTheme } from '../../theme/ThemeProvider';
 
 // pair key = `${contestId}:${otherProfileId}:${myRoleInThatPairing}`
@@ -30,6 +31,7 @@ export function suppressMatchBanner(pairKey: string) {
 type Banner = {
   matchId: string;
   name: string;
+  isTest: boolean;
 };
 
 function useLiveProfileId() {
@@ -75,10 +77,14 @@ export function MatchLiveBanner() {
 
       const { data } = await supabase
         .from('profiles')
-        .select('display_name')
+        .select('display_name, is_test')
         .eq('id', other)
         .maybeSingle();
-      setBanner({ matchId: row.id, name: data?.display_name ?? 'A dancer' });
+      setBanner({
+        matchId: row.id,
+        name: data?.display_name ?? 'A dancer',
+        isTest: data?.is_test ?? false,
+      });
     };
 
     const channel = supabase
@@ -124,9 +130,15 @@ export function MatchLiveBanner() {
         <Text style={{ fontFamily: fonts.mono, fontSize: fs(9), letterSpacing: 1.8, color: colors.brass }}>
           ✦ YOU'VE GOT A PARTNER
         </Text>
-        <Text style={{ fontFamily: fonts.serif, fontSize: fs(20), color: colors.ink, marginTop: 4 }}>
-          {banner.name}
-        </Text>
+        <View style={styles.nameRow}>
+          <Text
+            numberOfLines={1}
+            style={{ flexShrink: 1, fontFamily: fonts.serif, fontSize: fs(20), color: colors.ink }}
+          >
+            {banner.name}
+          </Text>
+          {banner.isTest ? <TestPill /> : null}
+        </View>
         <View style={styles.row}>
           <Pressable
             accessibilityRole="button"
@@ -189,6 +201,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     marginTop: 12,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
   },
   cta: {
     paddingVertical: 9,

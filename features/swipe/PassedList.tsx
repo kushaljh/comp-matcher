@@ -8,6 +8,7 @@ import { Image } from 'expo-image';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useSignedPhotoUrls } from '../shared/photo';
+import { TestPill } from '../shared/TestPill';
 import { withAlpha } from './tint';
 import type { DeckCard } from './types';
 
@@ -89,12 +90,15 @@ export function PassedList({ cards, restoring, onRestore }: PassedListProps) {
               )}
 
               <View style={styles.identity}>
-                <Text
-                  numberOfLines={1}
-                  style={{ fontFamily: fonts.serif, fontSize: fs(16), color: colors.ink }}
-                >
-                  {card.display_name}
-                </Text>
+                <View style={styles.nameRow}>
+                  <Text
+                    numberOfLines={1}
+                    style={{ flexShrink: 1, fontFamily: fonts.serif, fontSize: fs(16), color: colors.ink }}
+                  >
+                    {card.display_name}
+                  </Text>
+                  {card.is_test ? <TestPill /> : null}
+                </View>
                 <Text
                   numberOfLines={1}
                   style={{
@@ -193,6 +197,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 3,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
   },
   restore: {
     borderWidth: 1,

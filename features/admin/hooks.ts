@@ -85,6 +85,17 @@ export function useAdminRoster() {
   });
 }
 
+// Contact handles for ONE dancer, fetched only once their details are open —
+// `enabled` is the point of this hook, not an optimisation. See the note on
+// fetchDancerContacts().
+export function useAdminDancerContacts(profileId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'contacts', profileId],
+    queryFn: () => api.fetchDancerContacts(profileId),
+    enabled,
+  });
+}
+
 // Granting invites changes what that member sees in Settings, so this also
 // invalidates the ['invites', ...] keys features/invites/hooks.ts uses. That
 // only matters when an admin edits their own quota, but getting it wrong

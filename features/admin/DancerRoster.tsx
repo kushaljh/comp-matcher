@@ -19,7 +19,23 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Button, Card, TextField } from '../../theme/components';
 import { colors, fontSizes, fontWeights, spacing } from '../../theme/tokens';
 import type { RosterRow } from './api';
-import { useAdminRoster, useSetInviteQuota, useSetSuspended } from './hooks';
+import {
+  useAdminDancerContacts,
+  useAdminRoster,
+  useSetInviteQuota,
+  useSetSuspended,
+} from './hooks';
+
+const PLATFORM_LABELS: Record<string, string> = {
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  tiktok: 'TikTok',
+  youtube: 'YouTube',
+  whatsapp: 'WhatsApp',
+  phone: 'Phone',
+  email: 'Email',
+  other: 'Other',
+};
 
 function shortDate(value: string | null): string {
   if (!value) return '—';
@@ -36,6 +52,28 @@ function Field({ label, value }: { label: string; value: string }) {
       <Text style={styles.fieldLabel}>{label}</Text>
       <Text style={styles.fieldValue}>{value}</Text>
     </View>
+  );
+}
+
+// The handles a dancer added to be swapped on a match. Loaded only while
+// their details are open — see the note on fetchDancerContacts().
+function ContactList({ profileId, enabled }: { profileId: string; enabled: boolean }) {
+  const { data: contacts, isLoading, isError } = useAdminDancerContacts(profileId, enabled);
+
+  if (isLoading) return <Field label="Contacts" value="…" />;
+  if (isError) return <Field label="Contacts" value="Couldn’t load" />;
+  if (!contacts || contacts.length === 0) return <Field label="Contacts" value="None added" />;
+
+  return (
+    <>
+      {contacts.map((c, i) => (
+        <Field
+          key={`${c.platform}-${i}`}
+          label={PLATFORM_LABELS[c.platform] ?? c.platform}
+          value={c.handle}
+        />
+      ))}
+    </>
   );
 }
 
@@ -138,6 +176,8 @@ function DancerCard({ dancer }: { dancer: RosterRow }) {
 
       {expanded ? (
         <View style={styles.details}>
+          <Field label="Email" value={dancer.email ?? '—'} />
+          <ContactList profileId={dancer.profile_id} enabled={expanded} />
           <Field label="Invited by" value={dancer.invited_by_name ?? 'Founding member'} />
           <Field label="Signed up" value={shortDate(dancer.signed_up_at)} />
           <Field label="Finished their card" value={shortDate(dancer.onboarded_at)} />
@@ -188,6 +228,7 @@ export function DancerRoster() {
       (d) =>
         !q ||
         d.display_name.toLowerCase().includes(q) ||
+        (d.email ?? '').toLowerCase().includes(q) ||
         (d.invited_by_name ?? '').toLowerCase().includes(q)
     );
     return {
@@ -208,7 +249,7 @@ export function DancerRoster() {
         value={query}
         onChangeText={setQuery}
         autoCapitalize="none"
-        placeholder="Search by name, or by who invited them"
+        placeholder="Search by name, email, or who invited them"
       />
 
       {suspended.length ? (

@@ -103,6 +103,8 @@ export type RosterRow = {
   profile_id: string;
   user_id: string;
   display_name: string;
+  /** The login email. Every account has one — signup is email + password. */
+  email: string | null;
   photo_url: string | null;
   city: string | null;
   country: string | null;
@@ -120,6 +122,23 @@ export async function fetchDancerRoster(): Promise<RosterRow[]> {
   const { data, error } = await supabase.rpc('admin_dancer_roster');
   if (error) throw error;
   return (data ?? []) as RosterRow[];
+}
+
+// A dancer's contact handles. Deliberately NOT part of the roster: these are
+// match-gated for everyone else (profile_contacts_select), so the panel reads
+// them one dancer at a time, when an admin actually opens that dancer, rather
+// than bulk-loading everybody's Instagram on every page view.
+export type DancerContact = {
+  platform: Enums<'contact_platform'>;
+  handle: string;
+};
+
+export async function fetchDancerContacts(profileId: string): Promise<DancerContact[]> {
+  const { data, error } = await supabase.rpc('admin_dancer_contacts', {
+    p_profile_id: profileId,
+  });
+  if (error) throw error;
+  return (data ?? []) as DancerContact[];
 }
 
 // Inviting is a granted privilege: a new member starts at 0 and an admin

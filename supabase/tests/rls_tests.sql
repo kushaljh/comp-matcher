@@ -389,6 +389,11 @@ begin
   if not exists (select 1 from public.app_members where user_id = '00000000-0000-4000-a000-0000000000f1') then
     raise exception 'TEST 7 FAIL: redeem_invite did not grant F membership';
   end if;
+
+  -- The gate has actually opened: the same insert that was refused in 7a now
+  -- succeeds. This is the whole point of redeeming, and TEST 8 needs the row.
+  insert into public.profiles (id, user_id, display_name)
+  values ('00000000-0000-4000-b000-0000000000f1', '00000000-0000-4000-a000-0000000000f1', 'Test F (redeemed)');
 end $$;
 reset role;
 
@@ -441,7 +446,8 @@ begin
     raise exception 'TEST 7 FAIL: hook allowed an empty invite code';
   end if;
 
-  select code into v_code from public.invites where redeemed_by is null limit 1;
+  -- redeemed_at, not redeemed_by: see 20260729160000_invite_single_use_fix.sql.
+  select code into v_code from public.invites where redeemed_at is null limit 1;
   v_live := jsonb_build_object('user', jsonb_build_object('user_metadata',
               jsonb_build_object('invite_code', lower(v_code))));
   if public.hook_require_invite(v_live) <> '{}'::jsonb then
@@ -576,8 +582,14 @@ begin
   v_quota := public.admin_set_invite_quota(v_target, 999);
   if v_quota <> 20 then raise exception 'TEST 8 FAIL: quota was not clamped, got %', v_quota; end if;
 
-  select count(*) into n from public.admin_actions where action = 'set_invite_quota';
-  if n <> 2 then raise exception 'TEST 8 FAIL: audit log has % quota entries, expected 2', n; end if;
+  -- Scoped to THIS subject on purpose: admin_actions_select shows an admin
+  -- every row in the system, so a global count here would also pick up real
+  -- moderation done through the panel and fail for reasons unrelated to the
+  -- code under test.
+  select count(*) into n from public.admin_actions
+   where action = 'set_invite_quota'
+     and subject_user = '00000000-0000-4000-a000-0000000000f1';
+  if n <> 2 then raise exception 'TEST 8 FAIL: audit log has % quota entries for F, expected 2', n; end if;
 
   -- F was invited by E in 7d, so the roster must say so.
   select * into r from public.admin_dancer_roster() where profile_id = v_target;
@@ -585,6 +597,54 @@ begin
   if r.invited_by_name is null then raise exception 'TEST 8 FAIL: the roster lost F''s inviter'; end if;
   if r.signed_up_at is null then raise exception 'TEST 8 FAIL: the roster lost F''s signup date'; end if;
   if r.invite_quota <> 20 then raise exception 'TEST 8 FAIL: the roster shows quota %', r.invite_quota; end if;
+end $$;
+reset role;
+
+-- 8c-bis. Contact details: an admin can reach a dancer, and nobody else's
+--     access changed. profile_contacts stays match-gated for every non-admin
+--     caller — admin_dancer_contacts() is a SECURITY DEFINER side door for
+--     admins only, not a new policy on the table.
+-- C is the subject: nobody has matched C, so neither the admin nor F has any
+-- route to their handles except the one being tested.
+insert into public.profile_contacts (profile_id, platform, handle) values
+  ('00000000-0000-4000-b000-0000000000c1', 'instagram', '@test_c');
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000a1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare r record; n int;
+begin
+  select * into r from public.admin_dancer_roster()
+   where profile_id = '00000000-0000-4000-b000-0000000000c1';
+  if not found then raise exception 'TEST 8 FAIL: C is missing from the roster'; end if;
+  if r.email is null then raise exception 'TEST 8 FAIL: the roster returned no email'; end if;
+
+  -- The admin has NOT matched C, so the table would refuse them directly...
+  select count(*) into n from public.profile_contacts
+   where profile_id = '00000000-0000-4000-b000-0000000000c1';
+  if n <> 0 then raise exception 'TEST 8 FAIL: admin read contacts straight off the table'; end if;
+
+  -- ...but the admin function is the sanctioned door.
+  select count(*) into n from public.admin_dancer_contacts('00000000-0000-4000-b000-0000000000c1');
+  if n <> 1 then raise exception 'TEST 8 FAIL: admin sees % of C''s contacts, expected 1', n; end if;
+end $$;
+reset role;
+
+-- F has never matched C either, and F is not an admin: both doors shut.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000f1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare n int;
+begin
+  select count(*) into n from public.profile_contacts
+   where profile_id = '00000000-0000-4000-b000-0000000000c1';
+  if n <> 0 then raise exception 'TEST 8 FAIL: the match gate on profile_contacts was weakened (saw % rows)', n; end if;
+
+  begin
+    perform public.admin_dancer_contacts('00000000-0000-4000-b000-0000000000c1');
+    raise exception 'TEST 8 FAIL: a non-admin read contact handles through the admin function';
+  exception when insufficient_privilege then null;
+  end;
 end $$;
 reset role;
 
@@ -601,7 +661,10 @@ begin
     'testing the audit trail'
   );
 
-  select * into r from public.admin_actions where action = 'suspend' order by created_at desc limit 1;
+  select * into r from public.admin_actions
+   where action = 'suspend'
+     and subject_user = '00000000-0000-4000-a000-0000000000f1'
+   order by created_at desc limit 1;
   if not found then raise exception 'TEST 8 FAIL: suspension was not logged'; end if;
   if r.reason <> 'testing the audit trail' then
     raise exception 'TEST 8 FAIL: the reason was not recorded (got %)', r.reason;
@@ -627,7 +690,10 @@ begin
     end;
     if n_deleted <> 0 then raise exception 'TEST 8 FAIL: an admin deleted % audit rows', n_deleted; end if;
 
-    select count(*) into n_left from public.admin_actions;
+    -- Scoped to this test's own rows: a global count would stay non-zero on
+    -- the back of real moderation history and pass even if the delete worked.
+    select count(*) into n_left from public.admin_actions
+     where subject_user = '00000000-0000-4000-a000-0000000000f1';
     if n_left = 0 then raise exception 'TEST 8 FAIL: the audit log was emptied'; end if;
   end;
 end $$;

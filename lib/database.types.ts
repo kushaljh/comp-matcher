@@ -527,12 +527,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_dancer_contacts: {
+        Args: { p_profile_id: string }
+        Returns: {
+          handle: string
+          platform: Database["public"]["Enums"]["contact_platform"]
+        }[]
+      }
       admin_dancer_roster: {
         Args: Record<PropertyKey, never>
         Returns: {
           city: string | null
           country: string | null
           display_name: string
+          email: string | null
           invite_quota: number
           invited_by_name: string | null
           invites_claimed: number

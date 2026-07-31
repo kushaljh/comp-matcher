@@ -4,8 +4,8 @@
 // "2 pending" on the Events row is what tells you there's work, without you
 // having to go and look.
 
-import { Link } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AdminGate } from '../../../features/admin/AdminGate';
 import { useAdminOverview } from '../../../features/admin/hooks';
 import { Card } from '../../../theme/components';
@@ -20,12 +20,17 @@ function Stat({ value, label }: { value: number | string; label: string }) {
   );
 }
 
+// Pressable around a View rather than <Link> wrapping two <Text>s: on
+// react-native-web a Link renders as an <a>, and Texts inside it lay out
+// INLINE, so the label and its detail ran together on one line ("EventsNothing
+// waiting"). A View gives them back their block layout on every platform.
 function MenuRow({ href, label, detail }: { href: string; label: string; detail: string }) {
+  const router = useRouter();
   return (
-    <Link href={href} style={styles.menuRow}>
+    <Pressable onPress={() => router.push(href)} accessibilityRole="link" style={styles.menuRow}>
       <Text style={styles.menuLabel}>{label}</Text>
       <Text style={styles.menuDetail}>{detail}</Text>
-    </Link>
+    </Pressable>
   );
 }
 
@@ -99,6 +104,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    gap: spacing.xs,
   },
   menuLabel: {
     fontSize: fontSizes.lg,

@@ -9,14 +9,16 @@
 // (who, when, and why) for the people who actually need it.
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SUPPORT_EMAIL } from '../support/contact';
+import { SUPPORT_EMAIL, openSupportEmail } from '../support/contact';
 import { useSignOut } from '../profile/hooks';
+import { useSession } from './SessionProvider';
 import { Screen } from '../../theme/components';
 import { useTheme } from '../../theme/ThemeProvider';
 
 export function SuspendedScreen() {
   const { colors, fonts, fs, radii } = useTheme();
   const signOut = useSignOut();
+  const { session } = useSession();
 
   return (
     <Screen style={styles.screen}>
@@ -62,7 +64,19 @@ export function SuspendedScreen() {
           Nothing has been deleted — your entries and pairings are still here if the suspension is
           lifted.
           {'\n\n'}
-          If you think this is a mistake, email {SUPPORT_EMAIL}.
+          If you think this is a mistake, email{' '}
+          {/* Nested Text so the address sits inline in the sentence and still
+              takes a press on both web and native. It stays readable if the
+              tap does nothing — a device with no mail client leaves the
+              address on screen to copy. */}
+          <Text
+            onPress={() => openSupportEmail('Suspended account', session?.user.email)}
+            accessibilityRole="link"
+            style={{ color: colors.brass, textDecorationLine: 'underline' }}
+          >
+            {SUPPORT_EMAIL}
+          </Text>
+          .
         </Text>
 
         <Pressable

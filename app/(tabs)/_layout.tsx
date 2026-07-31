@@ -228,8 +228,15 @@ export default function TabsLayout() {
             }}
           >
             {[...NAV, ADMIN_NAV].map((item) => {
-              // Admin is registered for everyone so the route always exists,
-              // but href: null keeps it out of a non-admin's tab bar.
+              // Admin is registered for everyone so the route always exists;
+              // a non-admin simply gets no button for it, and /admin itself
+              // renders AdminGate's "Not authorized".
+              //
+              // Hiding it by rendering nothing from tabBarButton rather than
+              // by `href: null`: expo-router throws "Cannot use `href` and
+              // `tabBarButton` together" if both are set, and that throw
+              // happens at mount, taking the whole app down with it. Passing
+              // `href: undefined` still counts as setting it.
               const hidden = item.name === ADMIN_NAV.name && !isAdmin;
               return (
                 <Tabs.Screen
@@ -237,16 +244,16 @@ export default function TabsLayout() {
                   name={item.name}
                   options={{
                     title: item.label,
-                    href: hidden ? null : undefined,
                     // The tab bar hands the button its focus state as
                     // `aria-selected` (not accessibilityState), so read that.
-                    tabBarButton: (props) => (
-                      <TabBarButton
-                        label={item.label}
-                        focused={props['aria-selected'] === true}
-                        onPress={props.onPress}
-                      />
-                    ),
+                    tabBarButton: (props) =>
+                      hidden ? null : (
+                        <TabBarButton
+                          label={item.label}
+                          focused={props['aria-selected'] === true}
+                          onPress={props.onPress}
+                        />
+                      ),
                   }}
                 />
               );

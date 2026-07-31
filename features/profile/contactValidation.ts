@@ -78,6 +78,54 @@ function validatePhone(raw: string, label: string): ValidationResult {
   return ok(`+${digits}`);
 }
 
+/** The platforms whose handle is a phone number, and so share validatePhone. */
+export const PHONE_PLATFORMS: ReadonlySet<ContactPlatform> = new Set(['phone', 'whatsapp']);
+
+/**
+ * Group a number for display WHILE IT IS BEING TYPED. Cosmetic only:
+ * validatePhone strips these spaces straight back out, so a number grouped
+ * differently from local convention still stores and dials identically.
+ *
+ * Deliberately NOT country-aware beyond NANP. Getting every country's
+ * conventional spacing right needs a dial-code table, and the payoff is a
+ * display detail; +1 is special-cased only because it is the one grouping that
+ * actively misreads (+1 415 555 1234 vs a threes-split +141 555 51234).
+ *
+ * It never inserts the leading “+” on the user's behalf. That looks helpful and
+ * is a trap: typing a bare local "4155551234" would silently become
+ * "+415 555 1234" — a plausible Swiss number — instead of hitting
+ * validatePhone's "include the country code" error, which is the correct
+ * outcome for someone who forgot theirs.
+ */
+export function formatPhoneInput(raw: string): string {
+  const plus = raw.trimStart().startsWith('+');
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return plus ? '+' : '';
+
+  // NANP: 1 | area | exchange | line. Anything past 11 digits trails as its own
+  // group rather than vanishing, so an over-long number stays visible to edit.
+  const grouped =
+    plus && digits.startsWith('1')
+      ? inGroups(digits, [1, 3, 3, 4])
+      : // Threes, except a lone trailing digit gets folded back into the group
+        // before it — "415 555 123 4" reads as a typo rather than a number.
+        digits.replace(/(.{3})(?=.)/g, '$1 ').replace(/ (\d)$/, '$1');
+
+  return `${plus ? '+' : ''}${grouped}`;
+}
+
+function inGroups(digits: string, sizes: number[]): string {
+  const out: string[] = [];
+  let i = 0;
+  for (const size of sizes) {
+    if (i >= digits.length) break;
+    out.push(digits.slice(i, i + size));
+    i += size;
+  }
+  if (i < digits.length) out.push(digits.slice(i));
+  return out.join(' ');
+}
+
 function validateInstagram(raw: string): ValidationResult {
   const handle = bareHandle(raw, /instagram\.com/i);
   if (!/^[A-Za-z0-9._]{1,30}$/.test(handle)) {

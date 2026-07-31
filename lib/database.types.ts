@@ -259,6 +259,45 @@ export type Database = {
         }
         Relationships: []
       }
+      feedback: {
+        Row: {
+          author: string | null
+          author_email: string | null
+          author_name: string | null
+          category: Database["public"]["Enums"]["feedback_category"]
+          created_at: string
+          id: string
+          message: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: Database["public"]["Enums"]["feedback_status"]
+        }
+        Insert: {
+          author?: string | null
+          author_email?: string | null
+          author_name?: string | null
+          category: Database["public"]["Enums"]["feedback_category"]
+          created_at?: string
+          id?: string
+          message: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: Database["public"]["Enums"]["feedback_status"]
+        }
+        Update: {
+          author?: string | null
+          author_email?: string | null
+          author_name?: string | null
+          category?: Database["public"]["Enums"]["feedback_category"]
+          created_at?: string
+          id?: string
+          message?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: Database["public"]["Enums"]["feedback_status"]
+        }
+        Relationships: []
+      }
       invites: {
         Row: {
           code: string
@@ -573,6 +612,13 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: Json
       }
+      admin_set_feedback_status: {
+        Args: {
+          p_id: string
+          p_status: Database["public"]["Enums"]["feedback_status"]
+        }
+        Returns: undefined
+      }
       admin_set_invite_quota: {
         Args: { p_profile_id: string; p_quota: number }
         Returns: number
@@ -666,6 +712,8 @@ export type Database = {
       dance_role: "leader" | "follower"
       division: "novice" | "amateur" | "advanced" | "open"
       event_status: "pending" | "approved"
+      feedback_category: "bug" | "idea" | "other"
+      feedback_status: "new" | "resolved"
       swipe_direction: "like" | "pass"
     }
     CompositeTypes: {
@@ -791,6 +839,8 @@ export const Constants = {
       dance_role: ["leader", "follower"],
       division: ["novice", "amateur", "advanced", "open"],
       event_status: ["pending", "approved"],
+      feedback_category: ["bug", "idea", "other"],
+      feedback_status: ["new", "resolved"],
       swipe_direction: ["like", "pass"],
     },
   },

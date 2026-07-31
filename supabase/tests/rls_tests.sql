@@ -943,6 +943,110 @@ begin
 end $$;
 reset role;
 
+-- ===========================================================================
+-- TEST 11 — feedback is write-only for its author and read-only for admins
+--
+--   The table has exactly one select policy and it is admin-scoped, so a
+--   dancer cannot read back even the note they just wrote. That is what makes
+--   the client's insert have to skip .select() — see features/feedback/api.ts.
+--   A is still an admin from 7g; B is an ordinary member.
+--   See 20260731130000_user_feedback.sql.
+-- ===========================================================================
+
+-- 11a. B files a note, attributed to themselves, and the trigger stamps who
+--      they were at the time.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000b1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+begin
+  insert into public.feedback (author, category, message)
+  values ('00000000-0000-4000-a000-0000000000b1', 'bug', 'The floor deals me my own card.');
+end $$;
+reset role;
+
+do $$
+declare r record;
+begin
+  select * into r from public.feedback where author = '00000000-0000-4000-a000-0000000000b1';
+  if not found then raise exception 'TEST 11 FAIL: a member could not file feedback'; end if;
+  if r.status <> 'new' then raise exception 'TEST 11 FAIL: a new note landed %', r.status; end if;
+  if r.author_email is null then raise exception 'TEST 11 FAIL: author_email was not stamped'; end if;
+  if r.author_name is null then raise exception 'TEST 11 FAIL: author_name was not stamped'; end if;
+end $$;
+
+-- 11b/c/d. B cannot attribute a note to someone else, cannot file one that is
+--      already resolved, and cannot read the table at all — not even their own.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000b1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare n int;
+begin
+  begin
+    insert into public.feedback (author, category, message)
+    values ('00000000-0000-4000-a000-0000000000a1', 'other', 'Signed: definitely A.');
+    raise exception 'TEST 11 FAIL: B filed feedback in A''s name';
+  exception when insufficient_privilege then null;
+  end;
+
+  begin
+    insert into public.feedback (author, category, message, status)
+    values ('00000000-0000-4000-a000-0000000000b1', 'idea', 'Pre-handled, thanks.', 'resolved');
+    raise exception 'TEST 11 FAIL: a member filed a note that was already resolved';
+  exception when insufficient_privilege then null;
+  end;
+
+  select count(*) into n from public.feedback;
+  if n <> 0 then
+    raise exception 'TEST 11 FAIL: a member read % feedback rows, including their own', n;
+  end if;
+
+  begin
+    perform public.admin_set_feedback_status(
+      (select id from public.feedback limit 1), 'resolved');
+    raise exception 'TEST 11 FAIL: a non-admin resolved feedback';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
+-- 11e/f. The admin sees it, resolves it, and the log records that they did.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000a1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare v_id uuid; r record; n int;
+begin
+  select id into v_id from public.feedback
+   where author = '00000000-0000-4000-a000-0000000000b1';
+  if v_id is null then raise exception 'TEST 11 FAIL: an admin cannot see filed feedback'; end if;
+
+  perform public.admin_set_feedback_status(v_id, 'resolved');
+
+  select * into r from public.feedback where id = v_id;
+  if r.status <> 'resolved' then raise exception 'TEST 11 FAIL: status stayed %', r.status; end if;
+  if r.resolved_at is null then raise exception 'TEST 11 FAIL: resolved_at was not set'; end if;
+  if r.resolved_by <> '00000000-0000-4000-a000-0000000000a1' then
+    raise exception 'TEST 11 FAIL: resolved_by recorded %', r.resolved_by;
+  end if;
+
+  select count(*) into n from public.admin_actions
+   where action = 'resolve_feedback'
+     and subject_user = '00000000-0000-4000-a000-0000000000b1';
+  if n <> 1 then raise exception 'TEST 11 FAIL: the admin log recorded % resolutions', n; end if;
+
+  -- And reopening clears the resolution rather than leaving a half-state.
+  perform public.admin_set_feedback_status(v_id, 'new');
+  select * into r from public.feedback where id = v_id;
+  if r.status <> 'new' or r.resolved_at is not null or r.resolved_by is not null then
+    raise exception 'TEST 11 FAIL: reopening left the resolution behind';
+  end if;
+
+  -- 11g. And the landing page's count is the reason to open the tab at all.
+  if (public.admin_overview() ->> 'feedback_new')::int < 1 then
+    raise exception 'TEST 11 FAIL: admin_overview does not count the reopened note';
+  end if;
+end $$;
+reset role;
+
 rollback;
 
 \echo 'ALL RLS TESTS PASSED'

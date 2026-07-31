@@ -39,6 +39,7 @@ export default function AdminHomeScreen() {
 
   const pending = overview?.pending_events ?? 0;
   const outstanding = overview?.invites_outstanding ?? 0;
+  const newFeedback = overview?.feedback_new ?? 0;
 
   return (
     <AdminGate title="Admin">
@@ -71,6 +72,11 @@ export default function AdminHomeScreen() {
         href="/admin/invites"
         label="Invites"
         detail={outstanding === 0 ? 'No codes outstanding' : `${outstanding} outstanding`}
+      />
+      <MenuRow
+        href="/admin/feedback"
+        label="Feedback"
+        detail={newFeedback === 0 ? 'Nothing new' : `${newFeedback} new`}
       />
       <MenuRow href="/admin/log" label="Admin log" detail="Who did what, and why" />
     </AdminGate>

@@ -451,6 +451,23 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      get_passed: {
+        Args: { p_entry_id: string }
+        Returns: {
+          bio: string | null
+          city: string | null
+          country: string | null
+          display_name: string
+          division: Database["public"]["Enums"]["division"]
+          entry_id: string
+          note: string | null
+          photo_url: string | null
+          profile_id: string
+          role: Database["public"]["Enums"]["dance_role"]
+          state: string | null
+          values: string[]
+        }[]
+      }
       get_pool_counts: {
         Args: {
           p_contest_id: string

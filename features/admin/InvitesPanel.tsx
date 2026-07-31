@@ -8,8 +8,40 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Button, Card } from '../../theme/components';
 import { colors, fontSizes, fontWeights, spacing } from '../../theme/tokens';
-import { useAllInvites, useCreateInvite } from '../invites/hooks';
+import type { InviteRow } from '../invites/api';
+import { useAllInvites, useCreateInvite, useDeleteInvite } from '../invites/hooks';
 import { shareInvite } from '../invites/inviteLink';
+import { confirmAsync } from '../profile/confirm';
+
+// Admins delete any invite, not just their own (invites_admin_delete). The
+// confirm copy splits on whether the code was claimed, because the two cases
+// mean very different things: killing an outstanding code closes a door,
+// while deleting a claimed one only drops the paper trail — app_members
+// survives it, so the person stays a member either way.
+function DeleteInviteButton({ invite }: { invite: InviteRow }) {
+  const deleteInvite = useDeleteInvite();
+  const claimed = invite.redeemed_by != null;
+
+  async function handleDelete() {
+    const confirmed = await confirmAsync(
+      claimed ? 'Delete this claimed invite?' : 'Delete this invite?',
+      claimed
+        ? `${invite.code} has already been used. Deleting it removes the record only — the dancer who claimed it keeps their access. Suspend them instead if you want them off the floor.`
+        : `${invite.code} will stop working immediately, and the slot goes back to whoever created it.`,
+      'Delete'
+    );
+    if (confirmed) deleteInvite.mutate(invite.id);
+  }
+
+  return (
+    <Button
+      title={deleteInvite.isPending ? 'Deleting…' : 'Delete'}
+      variant="secondary"
+      onPress={handleDelete}
+      disabled={deleteInvite.isPending}
+    />
+  );
+}
 
 export function InvitesPanel() {
   const { data: invites, isLoading } = useAllInvites();
@@ -56,9 +88,12 @@ export function InvitesPanel() {
                 : `Created ${new Date(invite.created_at).toLocaleDateString()}`}
             </Text>
           </View>
-          {invite.redeemed_by ? null : (
-            <Button title="Share" variant="secondary" onPress={() => shareInvite(invite.code)} />
-          )}
+          <View style={styles.rowActions}>
+            {invite.redeemed_by ? null : (
+              <Button title="Share" variant="secondary" onPress={() => shareInvite(invite.code)} />
+            )}
+            <DeleteInviteButton invite={invite} />
+          </View>
         </View>
       ))}
     </Card>
@@ -91,6 +126,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   rowMain: { flexShrink: 1 },
+  rowActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   code: {
     fontSize: fontSizes.md,
     fontWeight: fontWeights.semibold,

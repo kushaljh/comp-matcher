@@ -443,6 +443,55 @@ begin
   end if;
 end $$;
 
+-- 7g. Deleting invites: a member can only bin their OWN unclaimed codes; an
+--     admin can bin anyone's, claimed included, without that removing the
+--     member the claimed code let in.
+--     (A is made an admin here; the row is rolled back with everything else.)
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000f1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare n int;
+begin
+  -- F did not create any of E's codes, so this deletes nothing.
+  delete from public.invites;
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'TEST 7 FAIL: non-owner F deleted % invites', n; end if;
+end $$;
+reset role;
+
+insert into public.admin_users (user_id) values ('00000000-0000-4000-a000-0000000000a1');
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000a1","role":"authenticated"}', true);
+set local role authenticated;
+do $$
+declare
+  n_before int;
+  n_deleted int;
+begin
+  select count(*) into n_before from public.invites;
+  if n_before < 3 then raise exception 'TEST 7 FAIL: expected E''s 3 invites to still exist, got %', n_before; end if;
+
+  -- Admin A created none of these, and one of them is claimed.
+  delete from public.invites;
+  get diagnostics n_deleted = row_count;
+  if n_deleted <> n_before then
+    raise exception 'TEST 7 FAIL: admin deleted % of % invites', n_deleted, n_before;
+  end if;
+end $$;
+reset role;
+
+-- Deleting the claimed invite must not evict the member it let in: the FK is
+-- ON DELETE SET NULL, so F keeps membership and their invited_by attribution.
+do $$
+declare r record;
+begin
+  select * into r from public.app_members
+   where user_id = '00000000-0000-4000-a000-0000000000f1';
+  if not found then raise exception 'TEST 7 FAIL: deleting a claimed invite removed the member'; end if;
+  if r.invite_id is not null then raise exception 'TEST 7 FAIL: app_members.invite_id should be null after the invite is deleted'; end if;
+  if r.invited_by is null then raise exception 'TEST 7 FAIL: invited_by attribution was lost'; end if;
+end $$;
+
 rollback;
 
 \echo 'ALL RLS TESTS PASSED'

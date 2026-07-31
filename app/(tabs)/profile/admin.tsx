@@ -5,6 +5,7 @@ import { colors, fontSizes, fontWeights, spacing } from '../../../theme/tokens';
 import { useAdminApprovedEvents, useAdminPendingEvents, useIsAdmin } from '../../../features/admin/hooks';
 import { PendingEventCard } from '../../../features/admin/PendingEventCard';
 import { ApprovedEventCard } from '../../../features/admin/ApprovedEventCard';
+import { DancerRoster } from '../../../features/admin/DancerRoster';
 
 // Guard: RLS is the REAL gate (a non-admin's queries below would just come
 // back empty/rejected regardless of this screen), this is purely UX so a
@@ -57,6 +58,9 @@ function AdminPanel() {
       ) : (
         approvedEvents.map((event) => <ApprovedEventCard key={event.id} event={event} />)
       )}
+
+      <Text style={styles.sectionTitle}>Dancers</Text>
+      <DancerRoster />
     </>
   );
 }

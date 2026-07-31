@@ -23,6 +23,8 @@ import { useEffect } from 'react';
 import { View } from 'react-native';
 import { colors } from '../../theme/tokens';
 import { useSession } from './SessionProvider';
+import { SuspendedScreen } from './SuspendedScreen';
+import { useAmSuspended } from './useAmSuspended';
 import { useHasProfile } from './useHasProfile';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
@@ -30,6 +32,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
   const router = useRouter();
   const { data: hasProfile, isLoading: profileLoading } = useHasProfile();
+  const { data: suspendedAt, isLoading: suspendedLoading } = useAmSuspended();
 
   // useSegments()'s inferred tuple type is narrower than the actual runtime
   // array (its length depends on which route matched), so widen it before
@@ -43,7 +46,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   // signing out while on onboarding would never redirect back to sign-in.
   const inSignInFlow = inAuthGroup && !inOnboarding;
   const inResetPassword = inAuthGroup && segmentList[1] === 'reset-password';
-  const loading = initializing || (!!session && profileLoading);
+  const loading = initializing || (!!session && (profileLoading || suspendedLoading));
 
   useEffect(() => {
     if (loading) return;
@@ -87,6 +90,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return <View style={{ flex: 1, backgroundColor: colors.cream }} />;
+  }
+
+  // Rendered in place of the app rather than routed to: there is no suspended
+  // route to guard, and the screen's own sign-out is the only way out of it.
+  // Sits after the redirect rules above so a suspended dancer mid-password-
+  // recovery still gets to finish setting their password.
+  if (session && !recovering && hasProfile && suspendedAt) {
+    return <SuspendedScreen since={suspendedAt} />;
   }
 
   return <>{children}</>;

@@ -340,6 +340,7 @@ export type Database = {
           id: string
           photo_url: string | null
           state: string | null
+          suspended_at: string | null
           user_id: string
           values: string[]
         }
@@ -352,6 +353,7 @@ export type Database = {
           id?: string
           photo_url?: string | null
           state?: string | null
+          suspended_at?: string | null
           user_id: string
           values?: string[]
         }
@@ -364,6 +366,7 @@ export type Database = {
           id?: string
           photo_url?: string | null
           state?: string | null
+          suspended_at?: string | null
           user_id?: string
           values?: string[]
         }
@@ -450,6 +453,10 @@ export type Database = {
       get_my_profile_id: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      admin_set_suspended: {
+        Args: { p_profile_id: string; p_suspended: boolean }
+        Returns: string | null
       }
       get_passed: {
         Args: { p_entry_id: string }

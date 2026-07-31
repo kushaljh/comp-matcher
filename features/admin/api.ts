@@ -70,6 +70,44 @@ export async function rejectEvent(eventId: string): Promise<void> {
   if (error) throw error;
 }
 
+// --- dancers (admin) ------------------------------------------------------
+
+// The roster the suspension panel works from. This is a plain profiles read —
+// profiles_select is `using (true)`, so it grants an admin NOTHING a signed-in
+// dancer couldn't already see. Suspension deliberately came with no new
+// visibility: swipes stay swiper-only and matches stay member-only.
+export type DancerRow = {
+  id: string;
+  display_name: string;
+  photo_url: string | null;
+  city: string | null;
+  country: string | null;
+  suspended_at: string | null;
+};
+
+export async function fetchDancers(): Promise<DancerRow[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, photo_url, city, country, suspended_at')
+    .order('display_name', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+// Suspend or reinstate. Goes through the RPC rather than an UPDATE because RLS
+// cannot limit a policy to one COLUMN — an admin update policy on profiles
+// would also let admins rewrite anyone's name, bio or photo. The function
+// touches suspended_at and nothing else, and raises if the caller isn't an
+// admin or is aiming at their own account.
+export async function setSuspended(profileId: string, suspended: boolean): Promise<string | null> {
+  const { data, error } = await supabase.rpc('admin_set_suspended', {
+    p_profile_id: profileId,
+    p_suspended: suspended,
+  });
+  if (error) throw error;
+  return data;
+}
+
 // --- contests (admin) -----------------------------------------------------
 
 export async function fetchContestsForEvent(eventId: string): Promise<ContestRow[]> {

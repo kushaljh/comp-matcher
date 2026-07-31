@@ -857,6 +857,65 @@ begin
   end if;
 end $$;
 
+-- ===========================================================================
+-- TEST 10 — how someone got in survives their inviter leaving
+--
+--   invited_by and invite_id are both ON DELETE SET NULL, so the roster used
+--   to infer "Founding member" for anyone with no inviter — which quietly
+--   promoted every invited member whose inviter deleted their account, and
+--   erased the trail an invite-only community exists to keep. app_members.
+--   origin records the fact at join time instead.
+--   See 20260729190000_member_origin.sql.
+-- ===========================================================================
+insert into auth.users (id, aud, role, email, created_at, updated_at) values
+  ('00000000-0000-4000-a000-00000000fa01','authenticated','authenticated','rls_originhost@test.local',now(),now()),
+  ('00000000-0000-4000-a000-00000000fa04','authenticated','authenticated','rls_seed@test.local',now(),now());
+insert into public.profiles (id, user_id, display_name) values
+  ('00000000-0000-4000-b000-00000000fa01','00000000-0000-4000-a000-00000000fa01','Origin Host'),
+  ('00000000-0000-4000-b000-00000000fa04','00000000-0000-4000-a000-00000000fa04','Origin Seed');
+insert into public.invites (code, created_by)
+values ('ORIGINTEST','00000000-0000-4000-a000-00000000fa01');
+
+insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+values ('00000000-0000-4000-a000-00000000fa02','authenticated','authenticated','rls_originguest@test.local',
+        '{"invite_code":"ORIGINTEST"}'::jsonb, now(), now());
+insert into public.profiles (id, user_id, display_name)
+values ('00000000-0000-4000-b000-00000000fa02','00000000-0000-4000-a000-00000000fa02','Origin Guest');
+
+do $$
+declare o text;
+begin
+  -- 10a. each path records itself
+  select origin into o from public.app_members where user_id='00000000-0000-4000-a000-00000000fa02';
+  if o <> 'invited' then raise exception 'TEST 10 FAIL: a coded signup recorded origin %', o; end if;
+
+  select origin into o from public.app_members where user_id='00000000-0000-4000-a000-00000000fa04';
+  if o <> 'seeded' then raise exception 'TEST 10 FAIL: a service-role signup recorded origin %', o; end if;
+
+  select origin into o from public.app_members where user_id='00000000-0000-4000-a000-0000000000a1';
+  if o <> 'grandfathered' then raise exception 'TEST 10 FAIL: a pre-existing member recorded origin %', o; end if;
+end $$;
+
+-- 10b. The inviter leaves. This DELETE is also the regression for
+--      admin_actions' foreign keys: it cascades to the inviter's invites,
+--      which fires the audit trigger, which used to fail with a 23503 trying
+--      to reference the very row being deleted.
+--      See 20260729200000_audit_log_outlives_rows.sql.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-0000000000a1","role":"authenticated"}', true);
+delete from auth.users where id = '00000000-0000-4000-a000-00000000fa01';
+select set_config('request.jwt.claims', '', true);
+
+do $$
+declare r record;
+begin
+  select * into r from public.app_members where user_id='00000000-0000-4000-a000-00000000fa02';
+  if not found then raise exception 'TEST 10 FAIL: the invitee left with their inviter'; end if;
+  if r.invited_by is not null then raise exception 'TEST 10 FAIL: invited_by should have been nulled'; end if;
+  if r.origin <> 'invited' then
+    raise exception 'TEST 10 FAIL: an invited member was relabelled % once their inviter left', r.origin;
+  end if;
+end $$;
+
 rollback;
 
 \echo 'ALL RLS TESTS PASSED'

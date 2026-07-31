@@ -76,6 +76,7 @@ export type Database = {
           invite_quota: number
           invited_by: string | null
           joined_at: string
+          origin: string
           user_id: string
         }
         Insert: {
@@ -83,6 +84,7 @@ export type Database = {
           invite_quota?: number
           invited_by?: string | null
           joined_at?: string
+          origin?: string
           user_id: string
         }
         Update: {
@@ -90,6 +92,7 @@ export type Database = {
           invite_quota?: number
           invited_by?: string | null
           joined_at?: string
+          origin?: string
           user_id?: string
         }
         Relationships: [
@@ -547,6 +550,7 @@ export type Database = {
           invites_created: number
           joined_at: string | null
           onboarded_at: string
+          origin: string
           photo_url: string | null
           profile_id: string
           signed_up_at: string

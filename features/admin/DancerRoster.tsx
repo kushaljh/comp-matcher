@@ -46,6 +46,28 @@ function shortDate(value: string | null): string {
   });
 }
 
+// Reads `origin` rather than inferring from invited_by, which goes null when
+// the inviter deletes their account — that used to relabel a perfectly
+// ordinary invited member as a founder and erase the trail.
+//
+// A departed inviter is named as gone rather than by name: keeping someone's
+// display name on another member's row would outlive the account deletion
+// they asked for.
+function howTheyGotIn(dancer: RosterRow): string {
+  switch (dancer.origin) {
+    case 'invited':
+      return dancer.invited_by_name
+        ? `Invite from ${dancer.invited_by_name}`
+        : 'Invite — from an account since deleted';
+    case 'grandfathered':
+      return 'Founding member — joined before invites';
+    case 'seeded':
+      return 'Created directly (seed or admin)';
+    default:
+      return 'Unknown';
+  }
+}
+
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.field}>
@@ -178,7 +200,7 @@ function DancerCard({ dancer }: { dancer: RosterRow }) {
         <View style={styles.details}>
           <Field label="Email" value={dancer.email ?? '—'} />
           <ContactList profileId={dancer.profile_id} enabled={expanded} />
-          <Field label="Invited by" value={dancer.invited_by_name ?? 'Founding member'} />
+          <Field label="Joined via" value={howTheyGotIn(dancer)} />
           <Field label="Signed up" value={shortDate(dancer.signed_up_at)} />
           <Field label="Finished their card" value={shortDate(dancer.onboarded_at)} />
           <QuotaControl dancer={dancer} />

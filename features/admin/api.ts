@@ -112,6 +112,12 @@ export type RosterRow = {
   signed_up_at: string;
   onboarded_at: string;
   joined_at: string | null;
+  /**
+   * How they got in. Recorded at join time, so unlike invited_by it survives
+   * their inviter deleting their account.
+   */
+  origin: 'grandfathered' | 'invited' | 'seeded';
+  /** Null once the inviter deletes their account — see `origin`. */
   invited_by_name: string | null;
   invite_quota: number;
   invites_created: number;

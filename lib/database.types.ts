@@ -34,6 +34,83 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_actions: {
+        Row: {
+          action: string
+          actor: string | null
+          actor_email: string | null
+          created_at: string
+          detail: Json
+          id: string
+          reason: string | null
+          subject_label: string | null
+          subject_user: string | null
+        }
+        Insert: {
+          action: string
+          actor?: string | null
+          actor_email?: string | null
+          created_at?: string
+          detail?: Json
+          id?: string
+          reason?: string | null
+          subject_label?: string | null
+          subject_user?: string | null
+        }
+        Update: {
+          action?: string
+          actor?: string | null
+          actor_email?: string | null
+          created_at?: string
+          detail?: Json
+          id?: string
+          reason?: string | null
+          subject_label?: string | null
+          subject_user?: string | null
+        }
+        Relationships: []
+      }
+      app_members: {
+        Row: {
+          invite_id: string | null
+          invite_quota: number
+          invited_by: string | null
+          invited_by_email: string | null
+          invited_by_name: string | null
+          joined_at: string
+          origin: string
+          user_id: string
+        }
+        Insert: {
+          invite_id?: string | null
+          invite_quota?: number
+          invited_by?: string | null
+          invited_by_email?: string | null
+          invited_by_name?: string | null
+          joined_at?: string
+          origin?: string
+          user_id: string
+        }
+        Update: {
+          invite_id?: string | null
+          invite_quota?: number
+          invited_by?: string | null
+          invited_by_email?: string | null
+          invited_by_name?: string | null
+          joined_at?: string
+          origin?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_members_invite_id_fkey"
+            columns: ["invite_id"]
+            isOneToOne: false
+            referencedRelation: "invites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       competition_history: {
         Row: {
           contest_name: string
@@ -179,6 +256,36 @@ export type Database = {
           status?: Database["public"]["Enums"]["event_status"]
           suggested_by?: string | null
           website_url?: string | null
+        }
+        Relationships: []
+      }
+      invites: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string
+          expires_at: string | null
+          id: string
+          redeemed_at: string | null
+          redeemed_by: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by: string
+          expires_at?: string | null
+          id?: string
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string
+          expires_at?: string | null
+          id?: string
+          redeemed_at?: string | null
+          redeemed_by?: string | null
         }
         Relationships: []
       }
@@ -429,6 +536,48 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_dancer_contacts: {
+        Args: { p_profile_id: string }
+        Returns: {
+          handle: string
+          platform: Database["public"]["Enums"]["contact_platform"]
+        }[]
+      }
+      admin_dancer_roster: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          city: string | null
+          country: string | null
+          display_name: string
+          email: string | null
+          invite_quota: number
+          invited_by_email: string | null
+          invited_by_name: string | null
+          inviter_still_here: boolean
+          invites_claimed: number
+          invites_created: number
+          joined_at: string | null
+          onboarded_at: string
+          origin: string
+          photo_url: string | null
+          profile_id: string
+          signed_up_at: string
+          suspended_at: string | null
+          user_id: string
+        }[]
+      }
+      admin_overview: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      admin_set_invite_quota: {
+        Args: { p_profile_id: string; p_quota: number }
+        Returns: number
+      }
+      create_invite: {
+        Args: Record<PropertyKey, never>
+        Returns: Database["public"]["Tables"]["invites"]["Row"]
+      }
       delete_my_account: {
         Args: Record<PropertyKey, never>
         Returns: undefined
@@ -455,7 +604,7 @@ export type Database = {
         Returns: string
       }
       admin_set_suspended: {
-        Args: { p_profile_id: string; p_suspended: boolean }
+        Args: { p_profile_id: string; p_suspended: boolean; p_reason?: string | null }
         Returns: string | null
       }
       get_passed: {
@@ -485,9 +634,17 @@ export type Database = {
           division: Database["public"]["Enums"]["division"]
         }[]
       }
+      my_invites_remaining: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       other_role: {
         Args: { r: Database["public"]["Enums"]["dance_role"] }
         Returns: Database["public"]["Enums"]["dance_role"]
+      }
+      redeem_invite: {
+        Args: { p_code: string }
+        Returns: undefined
       }
     }
     Enums: {

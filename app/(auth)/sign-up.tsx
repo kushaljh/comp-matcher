@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { Link, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 import { signUpWithEmail } from '../../features/auth/api';
@@ -7,6 +7,10 @@ import { useTheme } from '../../theme/ThemeProvider';
 
 export default function SignUpScreen() {
   const { colors, fonts, fs } = useTheme();
+  // Invite links (features/invites/inviteLink.ts) land here with ?code=...,
+  // so someone following one never has to retype it.
+  const { code } = useLocalSearchParams<{ code?: string }>();
+  const [inviteCode, setInviteCode] = useState(code ?? '');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +20,14 @@ export default function SignUpScreen() {
   async function handleSignUp() {
     setError(null);
     setLoading(true);
-    const { data, error: signUpError } = await signUpWithEmail(email.trim(), password);
+    // A bad code is rejected by the before_user_created hook, so its message
+    // arrives through the normal signUpError path below — no auth user is
+    // created in the meantime.
+    const { data, error: signUpError } = await signUpWithEmail(
+      email.trim(),
+      password,
+      inviteCode.trim()
+    );
     setLoading(false);
     if (signUpError) {
       setError(signUpError.message);
@@ -65,6 +76,25 @@ export default function SignUpScreen() {
         >
           Create an account
         </Text>
+        <Text
+          style={{
+            fontFamily: fonts.body,
+            fontSize: fs(14),
+            lineHeight: fs(21),
+            color: colors.ink2,
+            marginBottom: 20,
+            textAlign: 'center',
+          }}
+        >
+          Comp Matcher is invite only. Enter the code a member shared with you.
+        </Text>
+        <TextField
+          label="Invite code"
+          value={inviteCode}
+          onChangeText={setInviteCode}
+          autoCapitalize="characters"
+          autoCorrect={false}
+        />
         <TextField
           label="Email"
           value={email}
@@ -89,7 +119,7 @@ export default function SignUpScreen() {
           title="Sign up"
           onPress={handleSignUp}
           loading={loading}
-          disabled={!email.trim() || !password}
+          disabled={!inviteCode.trim() || !email.trim() || !password}
         />
         <Link href="/(auth)/sign-in" style={[styles.link, { color: colors.brass, fontFamily: fonts.body, fontSize: fs(14) }]}>
           Already have an account? Sign in

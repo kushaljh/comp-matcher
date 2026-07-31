@@ -5,13 +5,21 @@
 //                                    onboarding, which requires a session)
 //   session + recovering          -> (auth)/reset-password  (checked FIRST: a
 //                                    recovery link carries a real session)
+//   session, no app_members row   -> (auth)/invite
 //   session, no profiles row      -> (auth)/onboarding
 //   session + profile             -> away from (auth) group (tabs)
+//   session + profile + suspended -> SuspendedScreen, RENDERED not routed
+//
+// The membership rung sits above the profile rung because it is the stricter
+// gate: without an app_members row the profiles_insert policy rejects the
+// onboarding write, so sending an uninvited session to onboarding would just
+// dead-end it there. Suspension never collides with it — a suspended dancer
+// has a profile, so they have a membership row too.
 //
 // While the initial session bootstrap (or, once a session exists, the
-// has-profile check) is in flight, renders a blank cream screen instead of
-// `children` — this is what prevents a flash of protected content (or of
-// sign-in) before the auth state is actually known.
+// membership, has-profile and suspension checks) are in flight, renders a blank cream
+// screen instead of `children` — this is what prevents a flash of protected
+// content (or of sign-in) before the auth state is actually known.
 //
 // `useSegments`/`useRouter` work here even though this component sits above
 // <Stack> rather than inside a screen, because the navigation context is
@@ -25,12 +33,14 @@ import { colors } from '../../theme/tokens';
 import { useSession } from './SessionProvider';
 import { SuspendedScreen } from './SuspendedScreen';
 import { useAmSuspended } from './useAmSuspended';
+import { useHasMembership } from './useHasMembership';
 import { useHasProfile } from './useHasProfile';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { session, initializing, recovering } = useSession();
   const segments = useSegments();
   const router = useRouter();
+  const { data: hasMembership, isLoading: membershipLoading } = useHasMembership();
   const { data: hasProfile, isLoading: profileLoading } = useHasProfile();
   const { data: suspendedAt, isLoading: suspendedLoading } = useAmSuspended();
 
@@ -40,13 +50,16 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const segmentList = segments as readonly string[];
   const inAuthGroup = segmentList[0] === '(auth)';
   const inOnboarding = inAuthGroup && segmentList[1] === 'onboarding';
+  const inInvite = inAuthGroup && segmentList[1] === 'invite';
   // sign-in/sign-up/forgot-password: the only (auth) screens that are valid
-  // WITHOUT a session. onboarding needs a session (it reads session.user.id),
-  // so it must NOT be treated as a safe no-session destination — otherwise
-  // signing out while on onboarding would never redirect back to sign-in.
-  const inSignInFlow = inAuthGroup && !inOnboarding;
+  // WITHOUT a session. onboarding and invite both need a session (onboarding
+  // reads session.user.id, invite redeems as auth.uid()), so neither may be
+  // treated as a safe no-session destination — otherwise signing out from one
+  // would never redirect back to sign-in.
+  const inSignInFlow = inAuthGroup && !inOnboarding && !inInvite;
   const inResetPassword = inAuthGroup && segmentList[1] === 'reset-password';
-  const loading = initializing || (!!session && (profileLoading || suspendedLoading));
+  const loading =
+    initializing || (!!session && (membershipLoading || profileLoading || suspendedLoading));
 
   useEffect(() => {
     if (loading) return;
@@ -65,6 +78,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Stricter than the profile check below, so it comes first: an uninvited
+    // session cannot create a profile at all (profiles_insert requires an
+    // app_members row), so onboarding would be a dead end for it.
+    if (!hasMembership) {
+      if (!inInvite) router.replace('/(auth)/invite');
+      return;
+    }
+
     if (!hasProfile) {
       if (!inOnboarding) router.replace('/(auth)/onboarding');
       return;
@@ -79,9 +100,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     loading,
     session,
     recovering,
+    hasMembership,
     hasProfile,
     inAuthGroup,
     inOnboarding,
+    inInvite,
     inSignInFlow,
     inResetPassword,
     router,
@@ -97,7 +120,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   // Sits after the redirect rules above so a suspended dancer mid-password-
   // recovery still gets to finish setting their password.
   if (session && !recovering && hasProfile && suspendedAt) {
-    return <SuspendedScreen since={suspendedAt} />;
+    return <SuspendedScreen />;
   }
 
   return <>{children}</>;

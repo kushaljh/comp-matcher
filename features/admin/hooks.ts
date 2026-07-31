@@ -63,14 +63,68 @@ export function useAdminDancers() {
 export function useSetSuspended() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { profileId: string; suspended: boolean }) =>
-      api.setSuspended(vars.profileId, vars.suspended),
+    mutationFn: (vars: { profileId: string; suspended: boolean; reason?: string | null }) =>
+      api.setSuspended(vars.profileId, vars.suspended, vars.reason),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'dancers'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'roster'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'actions'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'overview'] });
       queryClient.invalidateQueries({ queryKey: ['swipe', 'deck'] });
       queryClient.invalidateQueries({ queryKey: ['swipe', 'passed'] });
       queryClient.invalidateQueries({ queryKey: ['entries', 'pool'] });
     },
+  });
+}
+
+// The roster with the invite trail — what the Admin tab's Dancers page reads.
+export function useAdminRoster() {
+  return useQuery({
+    queryKey: ['admin', 'roster'],
+    queryFn: api.fetchDancerRoster,
+  });
+}
+
+// Contact handles for ONE dancer, fetched only once their details are open —
+// `enabled` is the point of this hook, not an optimisation. See the note on
+// fetchDancerContacts().
+export function useAdminDancerContacts(profileId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'contacts', profileId],
+    queryFn: () => api.fetchDancerContacts(profileId),
+    enabled,
+  });
+}
+
+// Granting invites changes what that member sees in Settings, so this also
+// invalidates the ['invites', ...] keys features/invites/hooks.ts uses. That
+// only matters when an admin edits their own quota, but getting it wrong
+// would leave them staring at a stale "0 left".
+export function useSetInviteQuota() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { profileId: string; quota: number }) =>
+      api.setInviteQuota(vars.profileId, vars.quota),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'roster'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'actions'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'overview'] });
+      queryClient.invalidateQueries({ queryKey: ['invites'] });
+    },
+  });
+}
+
+export function useAdminOverview() {
+  return useQuery({
+    queryKey: ['admin', 'overview'],
+    queryFn: api.fetchOverview,
+  });
+}
+
+export function useAdminActions(subjectUserId?: string) {
+  return useQuery({
+    queryKey: ['admin', 'actions', subjectUserId ?? 'all'],
+    queryFn: () => api.fetchAdminActions(subjectUserId),
   });
 }
 

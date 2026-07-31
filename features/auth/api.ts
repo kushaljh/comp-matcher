@@ -10,11 +10,22 @@ import { supabase } from '../../lib/supabase';
 export type DanceRole = Enums<'dance_role'>;
 export type ContactPlatform = Enums<'contact_platform'>;
 
-export function signUpWithEmail(email: string, password: string) {
+// Comp Matcher is invite only, so signup always carries a code. It rides in as
+// user metadata, which puts it in front of both halves of the gate:
+//   * the before_user_created auth hook reads user_metadata.invite_code and
+//     rejects the signup outright if it does not match an unredeemed invite —
+//     that rejection is what surfaces as signUpError.message on the screen;
+//   * the auth.users trigger reads the same value from raw_user_meta_data and
+//     consumes the code atomically with the user insert.
+// Both live in supabase/migrations/20260729120000_invite_only.sql. The key is
+// always sent, empty string included: its ABSENCE is what marks a service-role
+// user creation, which the hook lets through.
+export function signUpWithEmail(email: string, password: string, inviteCode: string) {
   return supabase.auth.signUp({
     email,
     password,
     options: {
+      data: { invite_code: inviteCode },
       // Confirmation emails redirect back to wherever the user signed up
       // (deployed site or local dev) instead of the project's Site URL.
       // The origin must be allow-listed in Supabase Auth -> URL Configuration.

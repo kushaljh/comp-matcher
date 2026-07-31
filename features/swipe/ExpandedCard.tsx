@@ -6,6 +6,7 @@ import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PhotoLightbox } from '../shared/PhotoLightbox';
+import { TestPill } from '../shared/TestPill';
 import { useTheme } from '../../theme/ThemeProvider';
 import { formatLocalScene } from '../shared/location';
 import type { Clip } from '../shared/media';
@@ -88,9 +89,15 @@ export function ExpandedCard({
             <View style={styles.photoFoot} pointerEvents="none">
               <ScrimRamp color={colors.scrim} />
               <View style={[styles.photoFootInner, { backgroundColor: colors.scrim }]}>
-                <Text numberOfLines={2} style={{ fontFamily: fonts.serif, fontSize: fs(31), lineHeight: fs(33), color: colors.ink }}>
-                  {card.display_name}
-                </Text>
+                <View style={styles.nameRow}>
+                  <Text
+                    numberOfLines={2}
+                    style={{ flexShrink: 1, fontFamily: fonts.serif, fontSize: fs(31), lineHeight: fs(33), color: colors.ink }}
+                  >
+                    {card.display_name}
+                  </Text>
+                  {card.is_test ? <TestPill /> : null}
+                </View>
                 <Text style={[styles.micro, { fontFamily: fonts.mono, fontSize: fs(9), color: colors.brass, marginTop: 6 }]}>
                   {roleLine}
                 </Text>
@@ -246,6 +253,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     paddingTop: 4,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
   },
   body: {
     paddingHorizontal: 20,

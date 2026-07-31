@@ -445,6 +445,7 @@ export type Database = {
           created_at: string
           display_name: string
           id: string
+          is_test: boolean
           photo_url: string | null
           state: string | null
           suspended_at: string | null
@@ -458,6 +459,7 @@ export type Database = {
           created_at?: string
           display_name: string
           id?: string
+          is_test?: boolean
           photo_url?: string | null
           state?: string | null
           suspended_at?: string | null
@@ -471,6 +473,7 @@ export type Database = {
           created_at?: string
           display_name?: string
           id?: string
+          is_test?: boolean
           photo_url?: string | null
           state?: string | null
           suspended_at?: string | null
@@ -591,6 +594,7 @@ export type Database = {
           display_name: string
           division: Database["public"]["Enums"]["division"]
           entry_id: string
+          is_test: boolean
           note: string | null
           photo_url: string | null
           profile_id: string
@@ -616,6 +620,7 @@ export type Database = {
           display_name: string
           division: Database["public"]["Enums"]["division"]
           entry_id: string
+          is_test: boolean
           note: string | null
           photo_url: string | null
           profile_id: string

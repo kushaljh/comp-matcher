@@ -5,6 +5,7 @@ import { Image } from 'expo-image';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { PhotoSegments } from '../shared/MediaSections';
+import { TestPill } from '../shared/TestPill';
 import { withAlpha } from './tint';
 import type { DeckCard } from './types';
 
@@ -121,9 +122,15 @@ export function CardContent({
             <View style={[styles.rule, { backgroundColor: colors.cardLine }]} />
           </View>
 
-          <Text numberOfLines={2} style={{ fontFamily: fonts.serif, fontSize: fs(35), lineHeight: fs(37), color: colors.ink }}>
-            {card.display_name}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text
+              numberOfLines={2}
+              style={{ flexShrink: 1, fontFamily: fonts.serif, fontSize: fs(35), lineHeight: fs(37), color: colors.ink }}
+            >
+              {card.display_name}
+            </Text>
+            {card.is_test ? <TestPill /> : null}
+          </View>
 
           {card.values.length > 0 ? (
             <View style={styles.values}>
@@ -225,6 +232,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1.8,
     textTransform: 'uppercase',
     flexShrink: 1,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
   },
   rule: {
     flex: 1,

@@ -2,7 +2,7 @@
 // entered, in a horizontally snapping row. The active stub gets a 4px brass
 // edge bar, a brass hairline and a tinted wash.
 
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import type { DanceRole, MyEntry } from './types';
 
@@ -19,6 +19,22 @@ const ROLE_VERB: Record<DanceRole, string> = {
  */
 const STUB_W = 224;
 const STUB_GAP = 8;
+
+/**
+ * Web needs its own snapping. react-native-web's ScrollView does not implement
+ * snapToInterval / snapToOffsets / snapToAlignment AT ALL — grep its source and
+ * the props are absent; the only thing that emits CSS scroll-snap there is
+ * `pagingEnabled`, which snaps by viewport width rather than by stub and so
+ * lands in the wrong place for a 224px stub in a 358px column. So the web build
+ * gets the CSS properties directly, which is what snapToInterval would have
+ * compiled to if it existed.
+ *
+ * The casts are because these are CSS properties React Native's ViewStyle has
+ * no names for. react-native-web passes them straight through (it uses both
+ * itself); native never sees them.
+ */
+const SNAP_X = Platform.OS === 'web' ? ({ scrollSnapType: 'x mandatory' } as unknown as ViewStyle) : null;
+const SNAP_CHILD = Platform.OS === 'web' ? ({ scrollSnapAlign: 'start' } as unknown as ViewStyle) : null;
 
 type ContestStubsProps = {
   entries: MyEntry[];
@@ -45,7 +61,8 @@ export function ContestStubs({
       decelerationRate="fast"
       // Must not flex-grow into the column, and the stubs must not stretch to
       // fill it — without both, react-native-web renders them as huge cards.
-      style={styles.scroll}
+      // SNAP_X is the web half of the two snapToInterval props above.
+      style={[styles.scroll, SNAP_X]}
       contentContainerStyle={styles.row}
     >
       {entries.map((entry) => {
@@ -59,6 +76,7 @@ export function ContestStubs({
             accessibilityState={{ selected: active }}
             style={[
               styles.stub,
+              SNAP_CHILD,
               {
                 borderRadius: radii.rSm,
                 borderColor: active ? colors.brass : colors.line,

@@ -180,7 +180,10 @@ const styles = StyleSheet.create({
   },
   screenContent: {
     flex: 1,
-    padding: 16,
+    paddingHorizontal: 16,
+    // Trimmed from 16: vertical space is the scarce one on a phone, and the
+    // swipe deck flexes into whatever it is given.
+    paddingVertical: 12,
     // Phone-shaped canvas on large screens (desktop web): cap and center the
     // content column instead of smearing a mobile layout across the window.
     width: '100%',

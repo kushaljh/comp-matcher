@@ -353,11 +353,15 @@ export function Deck({
     return () => window.removeEventListener('keydown', onKey);
   }, [commit, undo, expanded, matchedFace, stack.length, showPanel]);
 
+  // One line, always: uppercase at fs(9) with 1.6 letter-spacing, anything
+  // longer than this wrapped to two lines on a phone and quietly took the
+  // height out of the deck. The "drag or use the buttons" hint that used to
+  // ride along here sits right above the buttons it describes anyway.
   const statusLine = showPanel
     ? stack.length
-      ? `${stack.length} back on the floor · deal them in when you're ready`
+      ? `${stack.length} back on the floor · deal them in`
       : 'Floor cleared'
-    : `${stack.length} of ${Math.max(cards.length, stack.length)} still on the floor · drag or use the buttons`;
+    : `${stack.length} of ${Math.max(cards.length, stack.length)} still on the floor`;
 
   return (
     <View style={styles.column}>
@@ -510,7 +514,7 @@ export function Deck({
           ]}
         >
           <View style={[styles.circle, styles.circleLg, { borderColor: colors.red }]}>
-            <Text style={{ fontFamily: fonts.body, fontSize: fs(21), lineHeight: fs(26), color: colors.red }}>
+            <Text style={{ fontFamily: fonts.body, fontSize: fs(17), lineHeight: fs(21), color: colors.red }}>
               ✕
             </Text>
           </View>
@@ -533,8 +537,8 @@ export function Deck({
             <Text
               style={{
                 fontFamily: fonts.body,
-                fontSize: fs(16),
-                lineHeight: fs(20),
+                fontSize: fs(13),
+                lineHeight: fs(17),
                 color: canUndo ? colors.ink2 : withAlpha(colors.ink2, 0.35),
               }}
             >
@@ -560,7 +564,7 @@ export function Deck({
               { borderColor: colors.brass, backgroundColor: colors.likeBg },
             ]}
           >
-            <Text style={{ fontFamily: fonts.body, fontSize: fs(21), lineHeight: fs(26), color: colors.brass }}>
+            <Text style={{ fontFamily: fonts.body, fontSize: fs(17), lineHeight: fs(21), color: colors.brass }}>
               ✓
             </Text>
           </View>
@@ -582,7 +586,10 @@ export function Deck({
             </Text>
           </View>
         ) : (
-          <Text style={[styles.micro, { fontFamily: fonts.mono, fontSize: fs(9), color: colors.ink2 }]}>
+          <Text
+            numberOfLines={1}
+            style={[styles.micro, { fontFamily: fonts.mono, fontSize: fs(9), color: colors.ink2 }]}
+          >
             {statusLine}
           </Text>
         )}
@@ -610,7 +617,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   deckArea: {
     position: 'relative',
@@ -669,13 +676,13 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
-    gap: 20,
+    gap: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   halo: {
     borderRadius: 999,
-    padding: 6,
+    padding: 4,
   },
   circle: {
     borderRadius: 999,
@@ -683,13 +690,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // 52 still clears the 44pt touch-target minimum with the halo on top; the
+  // buttons were the tallest block on a phone after the card itself.
   circleLg: {
-    width: 64,
-    height: 64,
+    width: 52,
+    height: 52,
   },
   circleSm: {
-    width: 46,
-    height: 46,
+    width: 38,
+    height: 38,
   },
   pressed: {
     opacity: 0.7,
@@ -698,7 +707,7 @@ const styles = StyleSheet.create({
     minHeight: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
   },
   noticePill: {
     borderWidth: 1,

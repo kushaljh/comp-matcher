@@ -11,6 +11,15 @@ const ROLE_VERB: Record<DanceRole, string> = {
   follower: 'following',
 };
 
+/**
+ * Stubs are a fixed width so the row can snap to a real interval. With the old
+ * min/max pair every stub was a different width, `snapToAlignment` had nothing
+ * to align to, and the row came to rest wherever the flick ended — usually with
+ * a half-cut stub parked at the reading edge.
+ */
+const STUB_W = 224;
+const STUB_GAP = 8;
+
 type ContestStubsProps = {
   entries: MyEntry[];
   selectedEntryId: string | null;
@@ -31,6 +40,7 @@ export function ContestStubs({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      snapToInterval={STUB_W + STUB_GAP}
       snapToAlignment="start"
       decelerationRate="fast"
       // Must not flex-grow into the column, and the stubs must not stretch to
@@ -107,18 +117,17 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   row: {
-    gap: 8,
+    gap: STUB_GAP,
     paddingBottom: 2,
     alignItems: 'flex-start',
   },
   stub: {
     position: 'relative',
-    minWidth: 182,
-    maxWidth: 260,
+    width: STUB_W,
     overflow: 'hidden',
     borderWidth: 1,
-    paddingTop: 10,
-    paddingBottom: 9,
+    paddingTop: 8,
+    paddingBottom: 7,
     paddingLeft: 20,
     paddingRight: 16,
     gap: 2,

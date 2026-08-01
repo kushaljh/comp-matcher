@@ -95,7 +95,12 @@ function StatusLine({ children }: { children: string }) {
   const { colors, fonts, fs } = useTheme();
   return (
     <View style={styles.statusRow}>
-      <Text style={[styles.micro, { fontFamily: fonts.mono, fontSize: fs(9), color: colors.ink2 }]}>
+      {/* Kept in step with Deck's own status row: one line, never wrapping
+          into the deck's height. */}
+      <Text
+        numberOfLines={1}
+        style={[styles.micro, { fontFamily: fonts.mono, fontSize: fs(9), color: colors.ink2 }]}
+      >
         {children}
       </Text>
     </View>
@@ -330,7 +335,7 @@ const styles = StyleSheet.create({
   column: {
     flex: 1,
     minHeight: 0,
-    gap: 12,
+    gap: 8,
   },
   deckHost: {
     flex: 1,
@@ -378,6 +383,7 @@ const styles = StyleSheet.create({
     minHeight: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
   },
   micro: {
     letterSpacing: 1.6,
